@@ -1,5 +1,6 @@
 const STORAGE_KEY = "noteDraft";
 const meetingNameInput = document.getElementById("meetingName");
+const titleLockButton = document.getElementById("titleLockButton");
 const meetingDateInput = document.getElementById("meetingDate");
 const meetingDateDisplay = document.getElementById("meetingDateDisplay");
 const notesInput = document.getElementById("notes");
@@ -45,6 +46,7 @@ const {
 
 const CONTEXT_KEY = "contextByHost";
 const DEBUG_KEY = "debugLogsEnabled";
+const TITLE_LOCK_KEY = "titleLockEnabled";
 
 let statusTimer;
 let toastTimer;
@@ -65,6 +67,7 @@ let lastCaretOffset = null;
 let pageHistory = [];
 let debugEnabled = false;
 let contextByHost = {};
+let titleLocked = false;
 const urlParams = new URLSearchParams(window.location.search);
 const isStandalone = urlParams.get("standalone") === "1";
 const sourceTabIdParam = Number(urlParams.get("sourceTabId"));
@@ -119,6 +122,15 @@ const loadDebugFlag = () => {
   });
 };
 
+const updateTitleLockButton = () => {
+  if (!titleLockButton) return;
+  titleLockButton.classList.toggle("is-locked", titleLocked);
+  const label = titleLocked ? "Unlock context title" : "Lock context title";
+  titleLockButton.setAttribute("aria-label", label);
+  titleLockButton.setAttribute("title", label);
+  titleLockButton.dataset.label = titleLocked ? "Unlock" : "Lock";
+};
+
 const setStatus = (message, timeoutMs = 0) => {
   showToast(message, { timeoutMs, minIntervalMs: 0 });
 };
@@ -161,6 +173,16 @@ const storageSet = (data) =>
     });
   });
 
+const setTitleLocked = (locked, { persist = true } = {}) => {
+  const nextValue = Boolean(locked);
+  if (titleLocked === nextValue) return;
+  titleLocked = nextValue;
+  updateTitleLockButton();
+  if (persist) {
+    storageSet({ [TITLE_LOCK_KEY]: titleLocked }).catch(() => {});
+  }
+};
+
 const storageRemove = (key) =>
   new Promise((resolve, reject) => {
     chrome.storage.local.remove(key, () => {
@@ -186,6 +208,10 @@ if (chrome?.storage?.onChanged) {
     if (area !== "local") return;
     if (Object.prototype.hasOwnProperty.call(changes, DEBUG_KEY)) {
       debugEnabled = Boolean(changes[DEBUG_KEY].newValue);
+    }
+    if (Object.prototype.hasOwnProperty.call(changes, TITLE_LOCK_KEY)) {
+      titleLocked = Boolean(changes[TITLE_LOCK_KEY].newValue);
+      updateTitleLockButton();
     }
   });
 }
@@ -403,10 +429,7 @@ const getActiveTab = () =>
   });
 
 const shouldAutoUpdateTitle = () => {
-  const currentValue = meetingNameInput.value.trim();
-  if (!currentValue) return true;
-  if (!userEditedTitle) return true;
-  return currentValue === lastAutoTitle;
+  return !titleLocked;
 };
 
 const updateTitleFromActiveTab = async () => {
@@ -422,20 +445,20 @@ const updateTitleFromActiveTab = async () => {
             resolve(result || null);
           });
         });
-      if (tab) {
-        const title = typeof tab.title === "string" ? tab.title.trim() : "";
-        currentPageTitle = title;
-        if (shouldAutoUpdateTitle()) {
-          meetingNameInput.value = title;
-          lastAutoTitle = title;
-          userEditedTitle = false;
+        if (tab) {
+          const title = typeof tab.title === "string" ? tab.title.trim() : "";
+          currentPageTitle = title;
+          if (shouldAutoUpdateTitle()) {
+            meetingNameInput.value = title;
+            lastAutoTitle = title;
+            userEditedTitle = false;
+          }
+          currentPageUrl = typeof tab.url === "string" ? tab.url : "";
+          recordPageVisit(currentPageUrl, currentPageTitle);
+          updateContextSuggestion();
+          debouncedSaveDraft();
+          return;
         }
-        currentPageUrl = typeof tab.url === "string" ? tab.url : "";
-        recordPageVisit(currentPageUrl, currentPageTitle);
-        updateContextSuggestion();
-        debouncedSaveDraft();
-        return;
-      }
       } catch (error) {
         // fall through to params
       }
@@ -463,16 +486,26 @@ const updateTitleFromActiveTab = async () => {
   const tabId = Number.isInteger(tab.id) ? tab.id : null;
   const tabUrl = typeof tab.url === "string" ? tab.url : "";
   const tabChanged = tabId !== lastAutoTabId || tabUrl !== lastAutoTabUrl;
-  if (!tabChanged && !shouldAutoUpdateTitle()) return;
-  meetingNameInput.value = title;
-  lastAutoTitle = title;
-  userEditedTitle = false;
-  lastAutoTabId = tabId;
-  lastAutoTabUrl = tabUrl;
-  currentPageUrl = tabUrl;
-  recordPageVisit(currentPageUrl, currentPageTitle);
-  updateContextSuggestion();
-  debouncedSaveDraft();
+  const shouldUpdateTitle = shouldAutoUpdateTitle();
+  if (!tabChanged && !shouldUpdateTitle) return;
+  let didUpdate = false;
+  if (shouldUpdateTitle) {
+    meetingNameInput.value = title;
+    lastAutoTitle = title;
+    userEditedTitle = false;
+    didUpdate = true;
+  }
+  if (tabChanged) {
+    lastAutoTabId = tabId;
+    lastAutoTabUrl = tabUrl;
+    currentPageUrl = tabUrl;
+    recordPageVisit(currentPageUrl, currentPageTitle);
+    updateContextSuggestion();
+    didUpdate = true;
+  }
+  if (didUpdate) {
+    debouncedSaveDraft();
+  }
 };
 
 const announcePanelOpen = (tabId) => {
@@ -814,6 +847,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 const handleMeetingNameInput = () => {
   const value = meetingNameInput.value.trim();
   userEditedTitle = value !== "" && value !== lastAutoTitle;
+  setTitleLocked(true);
   debouncedSaveDraft();
   debouncedRememberContext(value);
   updateContextSuggestion();
@@ -1045,9 +1079,16 @@ const init = async () => {
   // Time controls are rendered dynamically in the date picker.
   let draft = null;
   try {
-    const result = await storageGetMultiple([STORAGE_KEY, CONTEXT_KEY]);
+    const result = await storageGetMultiple([
+      STORAGE_KEY,
+      CONTEXT_KEY,
+      TITLE_LOCK_KEY,
+    ]);
     if (result[CONTEXT_KEY]) {
       contextByHost = result[CONTEXT_KEY] || {};
+    }
+    if (Object.prototype.hasOwnProperty.call(result, TITLE_LOCK_KEY)) {
+      titleLocked = Boolean(result[TITLE_LOCK_KEY]);
     }
     if (result && result[STORAGE_KEY]) {
       draft = result[STORAGE_KEY];
@@ -1061,6 +1102,7 @@ const init = async () => {
     meetingDateInput.value = toLocalDateTimeValue();
     updateMeetingDateDisplay(meetingDateInput.value);
   }
+  updateTitleLockButton();
   userEditedTitle = Boolean(meetingNameInput.value.trim());
   if (draft && Number.isInteger(draft.cursorOffset)) {
     lastCaretOffset = draft.cursorOffset;
@@ -1088,6 +1130,14 @@ const init = async () => {
 
 attachTabListeners();
 
+titleLockButton?.addEventListener("click", () => {
+  const nextValue = !titleLocked;
+  setTitleLocked(nextValue);
+  if (!nextValue) {
+    updateTitleFromActiveTab().catch(() => {});
+  }
+});
+
 meetingNameInput.addEventListener("input", handleMeetingNameInput);
 contextSuggestion?.addEventListener("click", () => {
   const host = getCurrentHost();
@@ -1096,6 +1146,7 @@ contextSuggestion?.addEventListener("click", () => {
   if (!value) return;
   meetingNameInput.value = value;
   userEditedTitle = true;
+  setTitleLocked(true);
   debouncedSaveDraft();
   updateContextSuggestion();
 });

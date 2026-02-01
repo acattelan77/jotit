@@ -92,13 +92,42 @@
       <section class="meta">
         <label class="field">
           <span class="field__label">What's this about?</span>
-          <input
-            id="meetingName"
-            type="text"
-            placeholder="Page title unavailable"
-            autocomplete="off"
-            aria-label="Context"
-          />
+          <div class="field-inline field-inline--text">
+            <input
+              id="meetingName"
+              type="text"
+              placeholder="Page title unavailable"
+              autocomplete="off"
+              aria-label="Context"
+            />
+            <button
+              id="titleLockButton"
+              class="inline-icon title-lock"
+              type="button"
+              aria-label="Lock context title"
+              title="Lock context title"
+              data-label="Lock"
+            >
+              <svg
+                class="icon icon-lock-closed"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <rect x="5" y="11" width="14" height="10" rx="2" ry="2" />
+                <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+              </svg>
+              <svg
+                class="icon icon-lock-open"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <rect x="5" y="11" width="14" height="10" rx="2" ry="2" />
+                <path d="M9 11V7a4 4 0 0 1 7 -3" />
+              </svg>
+            </button>
+          </div>
         </label>
         <button
           id="contextSuggestion"

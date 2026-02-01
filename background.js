@@ -1,10 +1,16 @@
-chrome.runtime.onInstalled.addListener(() => {
+const setDefaultPanelBehavior = () => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+};
+
+chrome.runtime.onInstalled.addListener(() => {
+  setDefaultPanelBehavior();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  setDefaultPanelBehavior();
 });
+
+setDefaultPanelBehavior();
 
 const detachedWindows = new Map();
 const openPanelTabs = new Set();
@@ -33,6 +39,25 @@ const debugLog = (scope, message, data = {}) => {
   }
   console.log("[Jot it][debug]", entry);
 };
+
+const ensurePanelOptions = async (tabId, source) => {
+  if (!Number.isInteger(tabId)) return;
+  try {
+    await chrome.sidePanel.setOptions({
+      tabId,
+      enabled: true,
+      path: "sidepanel.html",
+    });
+    debugLog("background", "PANEL_OPTIONS", { tabId, source });
+  } catch (error) {
+    debugLog("background", "PANEL_OPTIONS failed", {
+      tabId,
+      source,
+      error: String(error),
+    });
+  }
+};
+
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
@@ -133,6 +158,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "DETACH_PANEL" && Number.isInteger(message.tabId)) {
     (async () => {
       try {
+        await ensurePanelOptions(message.tabId, "detach_panel");
         await chrome.sidePanel.setOptions({
           tabId: message.tabId,
           enabled: false,
@@ -173,6 +199,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         debugLog("background", "DETACH_AND_OPEN", { tabId: tab.id });
 
         try {
+          await ensurePanelOptions(tab.id, "detach_open");
           await chrome.sidePanel.setOptions({
             tabId: tab.id,
             enabled: false,
@@ -252,6 +279,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "PANEL_OPEN" && Number.isInteger(message.tabId)) {
     openPanelTabs.add(message.tabId);
     debugLog("background", "PANEL_OPEN", { tabId: message.tabId });
+    ensurePanelOptions(message.tabId, "panel_open");
     ensureSelectionScript(message.tabId);
     chrome.tabs.sendMessage(message.tabId, { type: "PANEL_OPEN" }, () => {
       if (chrome.runtime.lastError) {
@@ -268,6 +296,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, error: "No active tab." });
         return;
       }
+      ensurePanelOptions(tab.id, "panel_open_active");
       openPanelTabs.add(tab.id);
       debugLog("background", "PANEL_OPEN_ACTIVE", { tabId: tab.id });
       ensureSelectionScript(tab.id);
