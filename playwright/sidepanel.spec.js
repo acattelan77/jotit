@@ -21,33 +21,41 @@ const launchExtension = async () => {
 
 test("sidepanel smoke", async () => {
   const { context, extensionId } = await launchExtension();
-  const page = await context.newPage();
+  try {
+    const page = await context.newPage();
 
-  await page.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+    await page.goto(`chrome-extension://${extensionId}/sidepanel.html`);
 
-  await expect(page.getByRole("heading", { name: "Jot it!" })).toBeVisible();
-  await expect(page.locator("#meetingName")).toBeVisible();
-  await page.getByText("Options").click();
-  await expect(page.locator("#templateSelect")).toBeVisible();
-  await expect(page.locator("#exportFormat")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Jot it!" })).toBeVisible();
+    await expect(page.locator("#meetingName")).toBeVisible();
 
-  const dateDisplay = page.locator("#meetingDateDisplay");
-  await expect(dateDisplay).not.toHaveValue("");
+    const dateDisplay = page.locator("#meetingDateDisplay");
+    await expect(dateDisplay).toHaveText(/\S+/);
 
-  await page.locator("#openDatePicker").click();
-  await expect(page.locator("#datePicker")).toHaveClass(/is-open/);
-  await expect(page.locator("#timeMinute option")).toHaveCount(60);
-  await page.locator("#dateToday").click();
-  await page.locator("#dateDone").click();
-  await expect(page.locator("#datePicker")).not.toHaveClass(/is-open/);
+    await page.locator("#openDatePicker").click();
+    await expect(page.locator("#datePicker")).toHaveClass(/is-open/);
 
-  const editor = page.locator("#notes");
-  await editor.click();
-  await page.keyboard.type("Hello ");
-  await page.locator('[data-format="bold"]').click();
-  await page.keyboard.type("bold");
-  const html = await editor.evaluate((el) => el.innerHTML);
-  expect(html).toMatch(/<b>|<strong>/);
+    const minuteValue = page.locator("#timeMinuteValue");
+    const minuteBefore = Number.parseInt(
+      (await minuteValue.textContent()) || "0",
+      10
+    );
+    await page.locator("#timeMinuteInc").click();
+    const expectedMinute = String((minuteBefore + 1) % 60).padStart(2, "0");
+    await expect(minuteValue).toHaveText(expectedMinute);
 
-  await context.close();
+    await page.locator("#dateToday").click();
+    await page.locator("#dateDone").click();
+    await expect(page.locator("#datePicker")).not.toHaveClass(/is-open/);
+
+    const editor = page.locator("#notes");
+    await editor.click();
+    await page.keyboard.type("Hello ");
+    await page.locator('[data-format="bold"]').click();
+    await page.keyboard.type("bold");
+    const html = await editor.evaluate((el) => el.innerHTML);
+    expect(html).toMatch(/<b>|<strong>/i);
+  } finally {
+    await context.close();
+  }
 });

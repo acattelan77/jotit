@@ -18,6 +18,13 @@ const DEBUG_KEY = "debugLogsEnabled";
 let debugEnabled = false;
 let debugLogs = [];
 
+const hasDetachedWindowForTab = (tabId) => {
+  for (const mappedTabId of detachedWindows.values()) {
+    if (mappedTabId === tabId) return true;
+  }
+  return false;
+};
+
 const loadDebugFlag = () => {
   chrome.storage.local.get(DEBUG_KEY, (result) => {
     if (chrome.runtime.lastError) return;
@@ -328,6 +335,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "PAGE_SELECTION" && sender?.tab?.id) {
     const tabId = sender.tab.id;
+    const panelVisibleForTab =
+      openPanelTabs.has(tabId) || hasDetachedWindowForTab(tabId);
+    if (!panelVisibleForTab) {
+      debugLog("background", "PAGE_SELECTION dropped (panel closed)", {
+        tabId,
+        url: message.url || "",
+      });
+      sendResponse({ ok: true, dropped: true });
+      return;
+    }
     debugLog("background", "PAGE_SELECTION", {
       tabId,
       textLength: typeof message.text === "string" ? message.text.length : 0,

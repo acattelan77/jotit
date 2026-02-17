@@ -8,11 +8,11 @@ Jot it! stores your notes locally in your browser and saves files to your device
 ## What data is handled
 - Note content you type in the editor.
 - The current page title and URL (used to prefill context and include a source line in exports).
-- Text you explicitly select on a webpage **only when the side panel is open** (inserts into the editor).
+- Text you explicitly select on a webpage **only when the notes UI is open** (side panel or detached note window), where it is inserted into the editor.
 
 ## Where data is stored
 - Draft notes are saved in `chrome.storage.local` on your device.
-- Preferences (export format, compact mode, auto source) and per‑site context suggestions are saved locally.
+- Preferences (for example title lock and debug logging) and per-site context suggestions are saved locally.
 - Exported notes are downloaded as `.md` files to your device using the Chrome downloads API.
 
 ## What data is not collected
