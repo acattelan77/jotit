@@ -23,6 +23,7 @@
 - [ ] Formatting buttons: bold, italic, heading, lists, code, link.
 - [ ] Selection capture: select text on page while panel open; text inserts in editor.
 - [ ] Export: save `.md` file successfully.
+- [ ] Settings: choose a custom export folder and verify save writes there.
 - [ ] Detach/reattach sidebar workflow works.
 
 ## Packaging

@@ -15,12 +15,20 @@ test("slugify creates clean slugs and falls back to note", () => {
   assert.equal(slugify("A".repeat(120)).length <= 48, true);
 });
 
-test("buildFilename uses date and slug", () => {
+test("buildFilename uses date, time and original title casing", () => {
   const filename = buildFilename({
-    meetingName: "My Note",
+    meetingName: "Meet - UBER",
     meetingDate: "2026-01-30T23:16",
   });
-  assert.equal(filename, "2026-01-30_2316-my-note.md");
+  assert.equal(filename, "2026-01-30 - h23:16 - Meet - UBER.md");
+});
+
+test("buildFilename sanitizes invalid filename characters in title", () => {
+  const filename = buildFilename({
+    meetingName: 'Plan: Q1/2026? <Draft>',
+    meetingDate: "2026-01-30T08:05",
+  });
+  assert.equal(filename, "2026-01-30 - h08:05 - Plan Q1 2026 Draft.md");
 });
 
 test("normalizeUrl accepts http(s) and mailto, rejects unsafe schemes", () => {

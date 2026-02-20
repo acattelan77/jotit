@@ -105,6 +105,7 @@ body {
   border-radius: 0;
   box-shadow: none;
   overflow: hidden;
+  position: relative;
 }
 
 .sr-only {
@@ -171,6 +172,7 @@ h1 {
 
 .meta,
 .notes,
+.settings,
 .actions {
   display: flex;
   flex-direction: column;
@@ -181,6 +183,66 @@ h1 {
   flex: 1;
   min-height: 0;
   margin-top: 3px;
+}
+
+.settings {
+  gap: 8px;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px 12px;
+  box-shadow: var(--shadow);
+}
+
+.settings[hidden] {
+  display: none !important;
+}
+
+.settings-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.settings-card__text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.settings-card__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.settings-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.settings-card__actions button {
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.settings-card__actions button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
 }
 
 .field {
@@ -919,7 +981,12 @@ body.compact .panel {
 
 body.compact .meta,
 body.compact .notes,
+body.compact .settings,
 body.compact .actions {
+  gap: 8px;
+}
+
+body.compact .settings {
   gap: 8px;
 }
 
@@ -978,6 +1045,12 @@ body.compact .toolbar button {
 
 .ghost:active {
   background: var(--surface-ghost-active);
+}
+
+.icon-button.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--icon-strong);
 }
 
 .actions__row {
@@ -1089,6 +1162,15 @@ body:not(.standalone) #attachWindow {
 
   .actions__row {
     flex-direction: column;
+  }
+
+  .settings-card__actions {
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+
+  .settings-card__actions button {
+    width: auto;
   }
 
   .field__hint {

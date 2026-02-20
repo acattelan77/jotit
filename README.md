@@ -7,6 +7,7 @@ Quick notes in a Chrome side panel. Capture ideas while you browse, format them,
 - One‑click detach to a standalone window.
 - Context title auto‑fills from the active page (lockable).
 - Rich text formatting with clean Markdown export.
+- Optional export folder selection in settings.
 - Selected page text inserts into the editor when the panel is open.
 
 ## Install (development)
@@ -20,12 +21,13 @@ Requires Chrome 114+.
 ## Usage
 1) Click the extension icon to open the side panel.
 2) Write notes, format as needed, and export.
-3) Use **Detach** to pop the panel into its own window.
+3) Optional: choose a custom export folder in **Settings**.
+4) Use **Detach** to pop the panel into its own window.
 
 ## Data & privacy
 - All data stays on-device. No network calls.
 - Drafts are stored in `chrome.storage.local`.
-- Exports are saved to your downloads folder.
+- Exports are saved either to your selected folder or to Downloads.
 
 See `PRIVACY.md` for the full policy.
 
