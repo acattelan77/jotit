@@ -313,7 +313,7 @@ const updateExportFolderStatus = () => {
   if (!exportFolderStatus) return;
   if (!supportsFolderSelection()) {
     exportFolderStatus.textContent = isAffectedMacChromeFolderPicker
-      ? "Folder selection is temporarily disabled on Chrome 145 for macOS due to a browser crash. Files are saved to Downloads."
+      ? "Custom folder selection is disabled on Chrome 145 for macOS due to browser crashes. Use Save As when exporting."
       : "Folder selection is not available here. Files are saved to Downloads.";
     if (chooseExportFolderButton) chooseExportFolderButton.disabled = true;
     if (saveExportFolderButton) saveExportFolderButton.disabled = true;
@@ -392,7 +392,7 @@ const chooseExportFolder = async () => {
   if (!supportsFolderSelection()) {
     showToast(
       isAffectedMacChromeFolderPicker
-        ? "Folder picker disabled on this Chrome version due to crashes."
+        ? "Folder picker disabled on this Chrome version. Use Save As instead."
         : "Folder selection is not available in this context.",
       {
         timeoutMs: 2600,
@@ -1074,13 +1074,42 @@ const downloadMarkdown = (
     );
   });
 
+const toDownloadFilename = (value) => {
+  const fallbackName = "note.md";
+  const raw = typeof value === "string" ? value : "";
+  const sanitized = (raw || fallbackName)
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!sanitized) return fallbackName;
+  return /\.md$/i.test(sanitized) ? sanitized : `${sanitized}.md`;
+};
+
 const handleSave = async () => {
   const data = getFormData();
   const filename = buildFilename(data);
+  const downloadFilename = toDownloadFilename(filename);
   const markdown = buildMarkdown(data);
 
   const payload = markdown;
   const mimeType = "text/markdown";
+
+  if (isAffectedMacChromeFolderPicker) {
+    try {
+      await downloadMarkdown(payload, downloadFilename, {
+        saveAs: true,
+        conflictAction: "uniquify",
+        mimeType,
+      });
+      showToast("Choose where to save in the dialog.", { timeoutMs: 1800 });
+      notesInput.focus();
+      return;
+    } catch (error) {
+      reportError("Save failed. Please try again.", error);
+      window.alert("Save failed. Please try again.");
+      return;
+    }
+  }
 
   if (exportDirectoryHandle) {
     try {
@@ -1106,14 +1135,14 @@ const handleSave = async () => {
   }
 
   try {
-    await downloadMarkdown(payload, filename, {
+    await downloadMarkdown(payload, downloadFilename, {
       saveAs: false,
       conflictAction: "uniquify",
       mimeType,
     });
   } catch (error) {
     try {
-      await downloadMarkdown(payload, filename, {
+      await downloadMarkdown(payload, downloadFilename, {
         saveAs: true,
         conflictAction: "uniquify",
         mimeType,

@@ -37,26 +37,23 @@ See `PRIVACY.md` for the full policy.
 - `downloads`: export `.md` files.
 - `tabs`: read the active tab title/URL for context.
 
-## Development
+## Assets
 
-Run the lightweight unit tests (Node built-in runner):
+Generate a consistent `j!` visual kit (extension icons + Chrome Web Store assets):
 
 ```sh
-node --test
+OPENAI_API_KEY=sk-... npm run assets:generate
 ```
 
-### Playwright smoke tests (dev-only)
+Outputs:
+- extension icons updated in `icons/` (`16`, `32`, `48`, `128`)
+- store visuals in `store-assets/chrome-web-store/`
+- editable masters in `store-assets/masters/`
 
-Requires installing dev dependencies once:
-
-```sh
-npm install
-```
-
-Run the smoke test (launches Chromium with the extension loaded):
+Optional flags:
 
 ```sh
-npm run test:e2e
+OPENAI_API_KEY=sk-... npm run assets:generate -- --quality medium --model gpt-image-1 --out ./store-assets
 ```
 
 ## Release

@@ -2,10 +2,6 @@
 node_modules/
 npm-debug.log*
 
-# Test artifacts
-playwright-report/
-test-results/
-
 # OS artifacts
 .DS_Store
 

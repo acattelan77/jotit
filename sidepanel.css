@@ -275,6 +275,10 @@ h1 {
   min-height: 0;
 }
 
+.field--context {
+  gap: 12px;
+}
+
 .notes .field {
   flex: 1;
   min-height: 0;
@@ -992,6 +996,10 @@ body.compact .settings {
 
 body.compact .field {
   gap: 6px;
+}
+
+body.compact .field.field--context {
+  gap: 12px;
 }
 
 body.compact .field input,
