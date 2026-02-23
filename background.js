@@ -1,16 +1,24 @@
-const setDefaultPanelBehavior = () => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+const configurePanelBehavior = async () => {
+  if (!chrome.sidePanel?.setPanelBehavior) return;
+  try {
+    // Keep the browser-managed action behavior enabled so `_execute_action`
+    // keyboard shortcuts (e.g. Atlas/Chromium extension shortcuts) open the
+    // side panel, while we still handle `chrome.action.onClicked` explicitly.
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch (error) {
+    // Ignore if a Chromium variant does not fully support panel behavior config.
+  }
 };
 
 chrome.runtime.onInstalled.addListener(() => {
-  setDefaultPanelBehavior();
+  void configurePanelBehavior();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  setDefaultPanelBehavior();
+  void configurePanelBehavior();
 });
 
-setDefaultPanelBehavior();
+void configurePanelBehavior();
 
 const detachedWindows = new Map();
 const openPanelTabs = new Set();
@@ -142,6 +150,175 @@ const getActiveTab = () =>
     });
   });
 
+const getTabById = (tabId) =>
+  new Promise((resolve) => {
+    if (!Number.isInteger(tabId)) {
+      resolve(null);
+      return;
+    }
+    chrome.tabs.get(tabId, (result) => {
+      if (chrome.runtime.lastError) {
+        resolve(null);
+        return;
+      }
+      resolve(result || null);
+    });
+  });
+
+const openDetachedPanelWindowForTab = async (tab, source = "unknown") => {
+  if (!tab?.id) {
+    return { ok: false, error: "No active tab found." };
+  }
+
+  debugLog("background", "DETACH_AND_OPEN", { tabId: tab.id, source });
+
+  try {
+    await ensurePanelOptions(tab.id, `detach_open:${source}`);
+    await chrome.sidePanel.setOptions({
+      tabId: tab.id,
+      enabled: false,
+      path: "sidepanel.html",
+    });
+    openPanelTabs.delete(tab.id);
+    chrome.tabs.sendMessage(tab.id, { type: "PANEL_CLOSE" }, () => {
+      if (chrome.runtime.lastError) {
+        // Ignore if the content script isn't available on this tab.
+      }
+    });
+    debugLog("background", "DETACH_PANEL (pre-open)", { tabId: tab.id, source });
+  } catch (error) {
+    debugLog("background", "DETACH_PANEL failed (pre-open)", {
+      tabId: tab.id,
+      source,
+      error: String(error),
+    });
+  }
+
+  const url = new URL(chrome.runtime.getURL("sidepanel.html"));
+  url.searchParams.set("standalone", "1");
+  url.searchParams.set("sourceTabId", String(tab.id));
+  if (tab.title) {
+    url.searchParams.set("sourceTitle", tab.title);
+  }
+  if (tab.url) {
+    url.searchParams.set("sourceUrl", tab.url);
+  }
+
+  const createdWindow = await chrome.windows.create({
+    url: url.toString(),
+    type: "popup",
+    width: 420,
+    height: 720,
+  });
+
+  if (!createdWindow?.id) {
+    try {
+      await chrome.sidePanel.setOptions({
+        tabId: tab.id,
+        enabled: true,
+        path: "sidepanel.html",
+      });
+      await chrome.sidePanel.open({ tabId: tab.id });
+    } catch (restoreError) {
+      // Best effort restore; ignore.
+    }
+    return { ok: false, error: "Failed to open detached window." };
+  }
+
+  detachedWindows.set(createdWindow.id, tab.id);
+
+  await ensureSelectionScript(tab.id);
+
+  return { ok: true, windowId: createdWindow.id };
+};
+
+const openSidePanelFromActionClick = async (clickedTab) => {
+  const tab =
+    clickedTab && Number.isInteger(clickedTab.id) ? clickedTab : await getActiveTab();
+  if (!tab) return;
+
+  const tabId = Number.isInteger(tab.id) ? tab.id : null;
+  const windowId = Number.isInteger(tab.windowId) ? tab.windowId : null;
+
+  if (!tabId && !windowId) return;
+
+  // Start enabling the tab panel, but do not await before `open()` to preserve
+  // the click gesture context required by `chrome.sidePanel.open()`.
+  const ensurePanelPromise = tabId
+    ? ensurePanelOptions(tabId, "action_click")
+    : Promise.resolve();
+
+  try {
+    if (tabId) {
+      await chrome.sidePanel.open({ tabId });
+    } else {
+      await chrome.sidePanel.open({ windowId });
+    }
+  } catch (error) {
+    if (!tabId) throw error;
+    await ensurePanelPromise;
+    try {
+      await chrome.sidePanel.open({ tabId });
+    } catch (retryError) {
+      debugLog("background", "ACTION_CLICK side panel blocked", {
+        tabId,
+        error: String(retryError),
+      });
+
+      // Atlas and other Chromium variants can refuse the extension side panel
+      // when their own sidebar occupies the same UI slot. Fall back to the
+      // existing standalone popup window in that case.
+      const fallbackResult = await openDetachedPanelWindowForTab(
+        tab,
+        "action_click_fallback"
+      );
+      if (fallbackResult?.ok) {
+        return;
+      }
+      throw retryError;
+    }
+  }
+
+  await ensurePanelPromise;
+
+  if (!tabId) return;
+
+  openPanelTabs.add(tabId);
+  debugLog("background", "ACTION_CLICK open", { tabId });
+  await ensureSelectionScript(tabId);
+  chrome.tabs.sendMessage(tabId, { type: "PANEL_OPEN" }, () => {
+    if (chrome.runtime.lastError) {
+      // Ignore if the content script isn't available on this tab.
+    }
+  });
+};
+
+chrome.action.onClicked.addListener((tab) => {
+  (async () => {
+    try {
+      await openSidePanelFromActionClick(tab);
+    } catch (error) {
+      debugLog("background", "ACTION_CLICK open failed", {
+        tabId: Number.isInteger(tab?.id) ? tab.id : null,
+        error: String(error),
+      });
+    }
+  })();
+});
+
+chrome.commands?.onCommand.addListener((command) => {
+  if (command !== "open-jot-it") return;
+  (async () => {
+    try {
+      await openSidePanelFromActionClick();
+    } catch (error) {
+      debugLog("background", "COMMAND open-jot-it failed", {
+        error: String(error),
+      });
+    }
+  })();
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
   const senderUrl = sender?.url || "";
@@ -186,83 +363,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         let tab = null;
         if (Number.isInteger(message.tabId)) {
-          tab = await new Promise((resolve) => {
-            chrome.tabs.get(message.tabId, (result) => {
-              if (chrome.runtime.lastError) {
-                resolve(null);
-                return;
-              }
-              resolve(result || null);
-            });
-          });
+          tab = await getTabById(message.tabId);
         }
         if (!tab) {
           tab = await getActiveTab();
         }
-        if (!tab?.id) {
-          sendResponse({ ok: false, error: "No active tab found." });
-          return;
-        }
-        debugLog("background", "DETACH_AND_OPEN", { tabId: tab.id });
-
-        try {
-          await ensurePanelOptions(tab.id, "detach_open");
-          await chrome.sidePanel.setOptions({
-            tabId: tab.id,
-            enabled: false,
-            path: "sidepanel.html",
-          });
-          openPanelTabs.delete(tab.id);
-          chrome.tabs.sendMessage(tab.id, { type: "PANEL_CLOSE" }, () => {
-            if (chrome.runtime.lastError) {
-              // Ignore if the content script isn't available on this tab.
-            }
-          });
-          debugLog("background", "DETACH_PANEL (pre-open)", { tabId: tab.id });
-        } catch (error) {
-          debugLog("background", "DETACH_PANEL failed (pre-open)", {
-            tabId: tab.id,
-            error: String(error),
-          });
-        }
-
-        const url = new URL(chrome.runtime.getURL("sidepanel.html"));
-        url.searchParams.set("standalone", "1");
-        url.searchParams.set("sourceTabId", String(tab.id));
-        if (tab.title) {
-          url.searchParams.set("sourceTitle", tab.title);
-        }
-        if (tab.url) {
-          url.searchParams.set("sourceUrl", tab.url);
-        }
-
-        const createdWindow = await chrome.windows.create({
-          url: url.toString(),
-          type: "popup",
-          width: 420,
-          height: 720,
-        });
-
-        if (!createdWindow?.id) {
-          try {
-            await chrome.sidePanel.setOptions({
-              tabId: tab.id,
-              enabled: true,
-              path: "sidepanel.html",
-            });
-            await chrome.sidePanel.open({ tabId: tab.id });
-          } catch (restoreError) {
-            // Best effort restore; ignore.
-          }
-          sendResponse({ ok: false, error: "Failed to open detached window." });
-          return;
-        }
-
-        detachedWindows.set(createdWindow.id, tab.id);
-
-        await ensureSelectionScript(tab.id);
-
-        sendResponse({ ok: true, windowId: createdWindow?.id || null });
+        const result = await openDetachedPanelWindowForTab(tab, "message");
+        sendResponse(result);
       } catch (error) {
         sendResponse({ ok: false, error: String(error) });
       }

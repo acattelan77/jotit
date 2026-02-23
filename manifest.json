@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jot it!",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "Quick notes in a side panel while you browse.",
   "minimum_chrome_version": "114",
   "action": {
@@ -24,6 +24,11 @@
   },
   "background": {
     "service_worker": "background.js"
+  },
+  "commands": {
+    "open-jot-it": {
+      "description": "Open Jot it (side panel with popup fallback)"
+    }
   },
   "content_security_policy": {
     "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'"
