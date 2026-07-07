@@ -388,19 +388,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     detachedWindows.set(message.windowId, message.tabId);
     sendResponse({ ok: true });
+    return;
   }
 
   if (message.type === "PANEL_OPEN" && Number.isInteger(message.tabId)) {
     openPanelTabs.add(message.tabId);
     debugLog("background", "PANEL_OPEN", { tabId: message.tabId });
-    ensurePanelOptions(message.tabId, "panel_open");
-    ensureSelectionScript(message.tabId);
+    void ensurePanelOptions(message.tabId, "panel_open");
+    void ensureSelectionScript(message.tabId);
     chrome.tabs.sendMessage(message.tabId, { type: "PANEL_OPEN" }, () => {
       if (chrome.runtime.lastError) {
         // Ignore if the content script isn't available on this tab.
       }
     });
     sendResponse({ ok: true });
+    return;
   }
 
   if (message.type === "PANEL_OPEN_ACTIVE") {
@@ -433,11 +435,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     });
     sendResponse({ ok: true });
+    return;
   }
 
   if (message.type === "PANEL_STATE") {
     const tabId = sender?.tab?.id;
     sendResponse({ open: Number.isInteger(tabId) && openPanelTabs.has(tabId) });
+    return;
   }
 
   if (message.type === "PAGE_SELECTION" && sender?.tab?.id) {
@@ -478,6 +482,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     );
     sendResponse({ ok: true });
+    return;
   }
 
   if (message.type === "DEBUG_LOG") {
@@ -487,6 +492,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     debugLog(message.scope || "unknown", message.message || "", message.data || {});
     sendResponse({ ok: true });
+    return;
   }
 
   if (message.type === "GET_DEBUG_LOGS") {
@@ -495,6 +501,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     sendResponse({ ok: true, logs: debugLogs });
+    return;
   }
 
   if (message.type === "CLEAR_DEBUG_LOGS") {
@@ -504,6 +511,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     debugLogs = [];
     sendResponse({ ok: true });
+    return;
   }
 });
 

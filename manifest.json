@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jot it!",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Quick notes in a side panel while you browse.",
   "minimum_chrome_version": "114",
   "action": {

@@ -48,6 +48,7 @@ const {
   normalizeUrl,
   htmlToMarkdown,
   markdownToHtml,
+  getActiveTab,
 } = NoteUtils;
 
 const CONTEXT_KEY = "contextByHost";
@@ -63,6 +64,9 @@ const chromeMajorVersion = chromeVersionMatch
   ? Number.parseInt(chromeVersionMatch[1], 10)
   : null;
 const isMacOs = /\bMacintosh\b|\bMac OS X\b/i.test(userAgent);
+// TODO: Remove this version-specific workaround once Chrome 145 is obsolete.
+// Feature detection for the macOS folder-picker crash is not available,
+// so we hardcode the known affected version.
 const isAffectedMacChromeFolderPicker =
   isMacOs && Number.isInteger(chromeMajorVersion) && chromeMajorVersion === 145;
 
@@ -451,7 +455,11 @@ const saveExportFolderSettings = async () => {
     showToast("Settings saved.", { timeoutMs: 1600 });
     return;
   }
-  await storageSet({ [EXPORT_DIR_NAME_KEY]: exportDirectoryName });
+  try {
+    await storageSet({ [EXPORT_DIR_NAME_KEY]: exportDirectoryName });
+  } catch (error) {
+    console.warn("Couldn't save export directory name.", error);
+  }
   let storedPersistently = true;
   try {
     await storeExportHandle(exportDirectoryHandle);
@@ -512,6 +520,8 @@ const debounce = (fn, wait = 250) => {
 };
 
 
+const storageState = { refreshed: {} };
+
 if (chrome?.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
@@ -521,6 +531,7 @@ if (chrome?.storage?.onChanged) {
     if (Object.prototype.hasOwnProperty.call(changes, TITLE_LOCK_KEY)) {
       titleLocked = Boolean(changes[TITLE_LOCK_KEY].newValue);
       updateTitleLockButton();
+      storageState.refreshed[TITLE_LOCK_KEY] = true;
     }
     if (Object.prototype.hasOwnProperty.call(changes, EXPORT_DIR_NAME_KEY)) {
       exportDirectoryName =
@@ -528,6 +539,11 @@ if (chrome?.storage?.onChanged) {
           ? changes[EXPORT_DIR_NAME_KEY].newValue
           : "";
       updateExportFolderStatus();
+      storageState.refreshed[EXPORT_DIR_NAME_KEY] = true;
+    }
+    if (Object.prototype.hasOwnProperty.call(changes, CONTEXT_KEY)) {
+      contextByHost = changes[CONTEXT_KEY].newValue || {};
+      storageState.refreshed[CONTEXT_KEY] = true;
     }
   });
 }
@@ -598,10 +614,9 @@ const recordPageVisit = (url, title) => {
 };
 
 const buildVisitedPagesMarkdown = () => {
-  if (!pageHistory.length) return "";
-  pageHistory = pageHistory.filter((entry) => normalizeUrl(entry.url) === entry.url);
-  if (!pageHistory.length) return "";
-  const lines = pageHistory.map((entry) => {
+  const valid = pageHistory.filter((entry) => normalizeUrl(entry.url) === entry.url);
+  if (!valid.length) return "";
+  const lines = valid.map((entry) => {
     if (entry.title && entry.title !== entry.url) {
       return `- [${entry.title}](${entry.url})`;
     }
@@ -611,10 +626,9 @@ const buildVisitedPagesMarkdown = () => {
 };
 
 const buildVisitedPagesText = () => {
-  if (!pageHistory.length) return "";
-  pageHistory = pageHistory.filter((entry) => normalizeUrl(entry.url) === entry.url);
-  if (!pageHistory.length) return "";
-  const lines = pageHistory.map((entry) => {
+  const valid = pageHistory.filter((entry) => normalizeUrl(entry.url) === entry.url);
+  if (!valid.length) return "";
+  const lines = valid.map((entry) => {
     if (entry.title && entry.title !== entry.url) {
       return `- ${entry.title} — ${entry.url}`;
     }
@@ -722,27 +736,6 @@ const updateEditorStackFocus = () => {
     editorStack.classList.remove("is-focused");
   }
 };
-
-const getActiveTab = () =>
-  new Promise((resolve) => {
-    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-      if (chrome.runtime.lastError) {
-        resolve(null);
-        return;
-      }
-      if (tabs && tabs.length) {
-        resolve(tabs[0]);
-      } else {
-        chrome.tabs.query({ active: true }, (allTabs) => {
-          if (chrome.runtime.lastError) {
-            resolve(null);
-            return;
-          }
-          resolve(allTabs && allTabs.length ? allTabs[0] : null);
-        });
-      }
-    });
-  });
 
 const shouldAutoUpdateTitle = () => {
   return !titleLocked;
@@ -874,15 +867,68 @@ const applyFormat = (format) => {
     case "italic":
       document.execCommand("italic", false, null);
       break;
-    case "heading":
+    case "heading": {
       if (!selection || selection.rangeCount === 0) return;
-      const range = selection.getRangeAt(0);
-      const selectedText = range.toString() || "Heading";
-      const h2 = document.createElement("h2");
-      h2.textContent = selectedText;
-      range.deleteContents();
-      range.insertNode(h2);
+      const headingRange = selection.getRangeAt(0);
+      const anchorNode = selection.anchorNode || selection.focusNode;
+      const existingHeading = anchorNode
+        ? findClosestTag(anchorNode, ["h1", "h2", "h3"])
+        : null;
+      if (existingHeading) {
+        const el = anchorNode?.nodeType === Node.ELEMENT_NODE
+          ? anchorNode
+          : anchorNode?.parentElement;
+        const headingEl = el?.closest?.(existingHeading);
+        if (headingEl) {
+          const parent = headingEl.parentNode;
+          while (headingEl.firstChild) {
+            parent.insertBefore(headingEl.firstChild, headingEl);
+          }
+          parent.removeChild(headingEl);
+          if (parent !== notesInput && !parent.textContent?.trim()) {
+            parent.remove();
+          }
+        }
+      } else {
+        const h2 = document.createElement("h2");
+        const fragment = headingRange.extractContents();
+        if (!fragment.textContent.trim()) {
+          h2.textContent = "Heading";
+        } else {
+          h2.appendChild(fragment);
+        }
+        headingRange.insertNode(h2);
+        if (h2.parentElement && h2.parentElement !== notesInput) {
+          const tag = h2.parentElement.tagName.toLowerCase();
+          if (tag === "p" || tag === "div") {
+            const parent = h2.parentElement;
+            const rest = document.createRange();
+            rest.setStartAfter(h2);
+            rest.setEndAfter(parent.lastChild || parent);
+            const restFragment = rest.extractContents();
+            const afterP = document.createElement("p");
+            if (restFragment.textContent?.trim()) {
+              afterP.appendChild(restFragment);
+            }
+            const beforeP = document.createElement("p");
+            const beforeRange = document.createRange();
+            beforeRange.selectNodeContents(parent);
+            beforeRange.setEndBefore(h2);
+            const beforeFragment = beforeRange.extractContents();
+            if (beforeFragment.textContent?.trim()) {
+              beforeP.appendChild(beforeFragment);
+            }
+            parent.parentNode?.insertBefore(beforeP, parent);
+            parent.parentNode?.insertBefore(h2, parent);
+            if (afterP.textContent?.trim()) {
+              parent.parentNode?.insertBefore(afterP, parent);
+            }
+            parent.remove();
+          }
+        }
+      }
       break;
+    }
     case "ul":
       document.execCommand("insertUnorderedList", false, null);
       break;
@@ -1175,6 +1221,7 @@ const handleClear = async () => {
     reportError("Couldn't clear the saved draft.", error);
   }
   resetEditorFormatting();
+  notesInput.innerHTML = "";
   notesInput.focus();
 };
 
@@ -1397,6 +1444,7 @@ const renderDatePicker = () => {
       setMeetingDateValue(updated);
       renderDatePicker();
     });
+    button.dataset.date = `${current.getFullYear()}-${pad2(current.getMonth() + 1)}-${pad2(current.getDate())}`;
     dateGrid.appendChild(button);
   }
 
@@ -1453,13 +1501,13 @@ const init = async () => {
       TITLE_LOCK_KEY,
       EXPORT_DIR_NAME_KEY,
     ]);
-    if (result[CONTEXT_KEY]) {
+    if (result[CONTEXT_KEY] && !storageState.refreshed[CONTEXT_KEY]) {
       contextByHost = result[CONTEXT_KEY] || {};
     }
-    if (Object.prototype.hasOwnProperty.call(result, TITLE_LOCK_KEY)) {
+    if (Object.prototype.hasOwnProperty.call(result, TITLE_LOCK_KEY) && !storageState.refreshed[TITLE_LOCK_KEY]) {
       titleLocked = Boolean(result[TITLE_LOCK_KEY]);
     }
-    if (typeof result[EXPORT_DIR_NAME_KEY] === "string") {
+    if (typeof result[EXPORT_DIR_NAME_KEY] === "string" && !storageState.refreshed[EXPORT_DIR_NAME_KEY]) {
       exportDirectoryName = result[EXPORT_DIR_NAME_KEY];
     }
     if (result && result[STORAGE_KEY]) {
@@ -1540,6 +1588,15 @@ notesInput.addEventListener("paste", (event) => {
   document.execCommand("insertText", false, text || "");
 });
 
+notesInput.addEventListener("drop", (event) => {
+  event.preventDefault();
+  const text = event.dataTransfer?.getData("text/plain") || "";
+  if (text) {
+    notesInput.focus();
+    document.execCommand("insertText", false, text);
+  }
+});
+
 // Removed toggle controls; source is always appended to notes.
 
 setNowButton.addEventListener("click", () => {
@@ -1565,6 +1622,34 @@ dateNext?.addEventListener("click", () => {
   pickerMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1);
   renderDatePicker();
 });
+dateGrid?.addEventListener("keydown", (event) => {
+  const days = Array.from(dateGrid.querySelectorAll(".date-picker__day"));
+  const currentIndex = days.findIndex((d) => d.classList.contains("is-selected"));
+  let nextIndex = currentIndex;
+  if (event.key === "ArrowRight") {
+    nextIndex = Math.min(currentIndex + 1, days.length - 1);
+  } else if (event.key === "ArrowLeft") {
+    nextIndex = Math.max(currentIndex - 1, 0);
+  } else if (event.key === "ArrowDown") {
+    nextIndex = Math.min(currentIndex + 7, days.length - 1);
+  } else if (event.key === "ArrowUp") {
+    nextIndex = Math.max(currentIndex - 7, 0);
+  } else {
+    return;
+  }
+  event.preventDefault();
+  if (nextIndex !== currentIndex && days[nextIndex]) {
+    const dateStr = days[nextIndex].dataset.date;
+    if (dateStr) {
+      const parts = dateStr.split("-").map(Number);
+      const updated = new Date(parts[0], parts[1] - 1, parts[2]);
+      setMeetingDateValue(updated);
+      renderDatePicker();
+    }
+    days[nextIndex].focus();
+  }
+});
+
 dateToday?.addEventListener("click", () => {
   setMeetingDateValue(new Date());
   pickerMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -1614,6 +1699,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  saveDraft();
   if (panelTabId) {
     chrome.runtime.sendMessage({ type: "PANEL_CLOSE", tabId: panelTabId }, () => {
       if (chrome.runtime.lastError) {
@@ -1730,4 +1816,6 @@ notesInput.addEventListener("keydown", (e) => {
   }
 });
 
-init();
+init().catch((error) => {
+  console.warn("Jot it! init failed:", error);
+});
