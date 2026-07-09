@@ -116,6 +116,8 @@ if (isStandalone) {
   document.body.classList.add("standalone");
 }
 
+const TOAST_TRANSITION_MS = 160;
+
 const showToast = (
   message,
   { timeoutMs = 1800, minIntervalMs = 0, variant = "default" } = {}
@@ -132,10 +134,14 @@ const showToast = (
   if (timeoutMs > 0) {
     toastTimer = window.setTimeout(() => {
       if (statusMessage.textContent === message) {
-        statusMessage.textContent = "";
         statusMessage.classList.remove("is-visible");
-        statusMessage.classList.remove("is-error");
-        statusMessage.classList.remove("is-ambient");
+        window.setTimeout(() => {
+          if (statusMessage.textContent === message) {
+            statusMessage.textContent = "";
+            statusMessage.classList.remove("is-error");
+            statusMessage.classList.remove("is-ambient");
+          }
+        }, TOAST_TRANSITION_MS);
       }
     }, timeoutMs);
   }
@@ -1005,6 +1011,14 @@ const buildObsidianImageExport = async (markdown, noteFilename) => {
 
 const toYamlString = (value) => JSON.stringify(String(value || ""));
 
+const toYamlLinkListItem = (title, url) => {
+  const safeTitle =
+    String(title || url || "")
+      .replace(/[\[\]\r\n]/g, " ")
+      .trim() || url;
+  return toYamlString(`[${safeTitle}](${url})`);
+};
+
 const getLocalDateTimeParts = (value) => {
   const parsed = value ? new Date(value) : new Date();
   const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
@@ -1032,8 +1046,7 @@ const buildYamlFrontmatter = ({ title, meetingDate }) => {
   if (pages.length) {
     lines.push("pages_visited:");
     pages.forEach((page) => {
-      lines.push(`  - title: ${toYamlString(page.title)}`);
-      lines.push(`    url: ${toYamlString(page.url)}`);
+      lines.push(`  - ${toYamlLinkListItem(page.title, page.url)}`);
     });
   } else {
     lines.push("pages_visited: []");
