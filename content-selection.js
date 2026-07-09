@@ -55,7 +55,7 @@
     });
   };
 
-  const sendSelection = (text) => {
+  const sendSelectionCandidate = (text) => {
     const trimmed = (text || "").trim();
     if (!trimmed) return;
     const payload = trimmed.slice(0, MAX_SELECTION_LENGTH);
@@ -68,7 +68,12 @@
     const pageTitle = document?.title || "";
     try {
       chrome.runtime.sendMessage(
-        { type: "PAGE_SELECTION", text: payload, url: pageUrl, title: pageTitle },
+        {
+          type: "PAGE_SELECTION_CANDIDATE",
+          text: payload,
+          url: pageUrl,
+          title: pageTitle,
+        },
         () => {
           try {
             if (chrome.runtime.lastError) {
@@ -83,7 +88,7 @@
           }
         }
       );
-      debugLog("sendSelection", {
+      debugLog("sendSelectionCandidate", {
         length: payload.length,
         preview: payload.slice(0, 60),
         url: pageUrl,
@@ -104,7 +109,7 @@
     const selectedText = (lastSelectionText || selection?.toString() || "").trim();
     window.clearTimeout(debounceTimer);
     debounceTimer = window.setTimeout(() => {
-      sendSelection(selectedText);
+      sendSelectionCandidate(selectedText);
     }, DEBOUNCE_MS);
   };
 

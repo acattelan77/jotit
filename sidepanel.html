@@ -260,6 +260,24 @@
 
       <section class="notes">
         <div class="field field--notes">
+          <div id="selectionCapture" class="selection-capture" hidden>
+            <span id="selectionPreview" class="selection-capture__preview"></span>
+            <button id="addSelectionBtn" class="selection-capture__add" type="button">
+              Add selection
+            </button>
+            <button
+              id="dismissSelectionBtn"
+              class="selection-capture__dismiss"
+              type="button"
+              aria-label="Dismiss selection"
+              title="Dismiss selection"
+            >
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
           <div class="editor-stack">
           <div class="toolbar" role="toolbar" aria-label="Formatting options">
             <button type="button" data-format="bold" title="Bold (Cmd+B)" data-label="Bold" aria-label="Bold">
@@ -325,6 +343,11 @@
               aria-label="Notes"
               spellcheck="true"
             ></div>
+            <div class="editor-stats">
+              <span id="wordCount">0 words</span>
+              <span class="editor-stats__separator" aria-hidden="true">·</span>
+              <span id="characterCount">0 characters</span>
+            </div>
           </div>
         </div>
       </section>

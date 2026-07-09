@@ -1,28 +1,67 @@
-# Privacy Policy — Jot it!
+# Privacy Policy - Jot it!
 
-**Last updated:** 2026-02-20
+**Last updated:** 2026-07-09
 
 ## Summary
-Jot it! stores your notes locally in your browser and saves files to your device when you export. Files can be exported to Downloads or to a folder you explicitly choose in settings. The extension does **not** send data to any servers and does **not** use analytics or tracking.
 
-## What data is handled
+Jot it! stores notes locally in Chrome and exports Markdown files to your
+device. It does not send your notes, selected text, page titles, URLs, or usage
+data to any server. It does not use analytics, ads, or tracking.
+
+## Data The Extension Handles
+
 - Note content you type in the editor.
-- The current page title and URL (used to prefill context and include a source line in exports).
-- Text you explicitly select on a webpage **only when the notes UI is open** (side panel or detached note window), where it is inserted into the editor.
+- The note date and time.
+- The active page title and URL, used to prefill note context and build exported
+  YAML frontmatter metadata.
+- Text you select on ordinary web pages while the notes UI is open. The
+  extension shows it as a pending selection and only inserts it into the note
+  after you click **Add selection**; otherwise selection messages are dropped.
+- Images you explicitly paste into the editor, including supported copied web
+  image URLs and local clipboard image data.
+- Local preferences such as title lock, debug logging, and recent context
+  suggestions for a site.
 
-## Where data is stored
-- Draft notes are saved in `chrome.storage.local` on your device.
-- Preferences (for example title lock, selected export folder name, and debug logging) and per-site context suggestions are saved locally.
-- If you choose a custom export folder, the browser stores a local folder permission handle so the extension can write files there.
-- Exported notes are saved as `.md` files either via direct write to your selected folder or via the Chrome downloads API.
+## Where Data Is Stored
 
-## What data is not collected
-- No cookies, credentials, or background browsing history are collected.
-- No data is transmitted to third-party services.
+- Draft notes are stored in `chrome.storage.local` on your device.
+- Preferences and per-site context suggestions are stored in
+  `chrome.storage.local`.
+- Exported notes are saved as `.md` files through Chrome's Downloads flow. When
+  a note includes images, supported image attachments are saved in an
+  `attachments/` folder next to the exported note.
 
-## Data retention
-- Draft notes remain on your device until you clear them or uninstall the extension.
-- Exported files are stored in your selected folder or in your browser downloads location.
+## Network Use
+
+The extension does not send data to an application server. All note editing,
+local draft saving, selected-text handling, and Markdown generation run inside
+Chrome on your device. If you export a note that references a supported web
+image URL, Chrome may download that image URL as an attachment as part of the
+user-initiated export.
+
+## Image Safety
+
+- Pasted HTML is not trusted or inserted into the note.
+- Only common raster image formats are accepted: PNG, JPEG, GIF, WebP, and AVIF.
+- SVG images are intentionally not accepted.
+- Large pasted images are rejected before being stored in the draft.
+
+## What Is Not Collected
+
+- No cookies, passwords, credentials, or payment information are collected.
+- No browsing history is collected in the background.
+- No analytics events are recorded.
+- No data is sold, shared, or transmitted to third parties.
+
+## Data Retention
+
+- Draft notes remain in local Chrome storage until you clear the note, overwrite
+  the draft, clear extension storage, or uninstall the extension.
+- Exported Markdown files and image attachments remain wherever you save them.
+- Recent context suggestions remain in local Chrome storage and are capped to a
+  limited set of site entries.
 
 ## Contact
-If you have questions about privacy, contact the developer through the Chrome Web Store listing.
+
+If you have questions about privacy, contact the developer through the Chrome
+Web Store listing.

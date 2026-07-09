@@ -115,12 +115,18 @@ all of the below live, in both light and dark.
   shape.
 
 **Toast** (`#statusMessage`)
-- Neutral confirmations ("Saved locally", "Exported to Downloads"): Material
+- Neutral confirmations ("Exported to Downloads", "File saved"): Material
   "snackbar" shape — dark ink surface (`--tooltip-bg`/`--tooltip-ink`), small
   8px corner radius rectangle (not a pill), left-aligned padding.
 - Errors: same shape, warm red bg (`#b3413a` light / `#d45a52` dark) with light
   ink — the one intentional exception to the single-accent rule, reserved
   strictly for failure states.
+
+**Autosave status**
+- "Saved locally" is not a snackbar. Treat it as ambient state text: 11px,
+  `--muted-soft`, italic, no background, no border, no shadow. Keep it aligned
+  with the footer/version row so it reassures without asking for attention.
+  Reserve snackbar styling for explicit exports and errors.
 
 **Title lock toggle**
 - Unlocked: ghost circular icon button, open-padlock icon.
@@ -130,6 +136,12 @@ all of the below live, in both light and dark.
 **Context suggestion link** ("Use last: …")
 - Plain text button, `--muted` color, no border/background, `--ink` on hover.
   Never gets a background — it's a low-emphasis affordance.
+
+**Pending selection strip** ("Add selection")
+- Low-emphasis action row, not an input and not a snackbar. Use
+  `--surface-ghost` with `--border-soft`, `--radius-sm`, compact vertical
+  padding, and 11px muted italic preview text. The action is a small tonal pill
+  using `--accent-soft` / `--accent-strong`; dismiss is a circular icon button.
 
 **Date & time popover**
 - Container: `--surface` bg, `--border`, `--radius-lg` (24px), `--shadow`.
@@ -144,11 +156,10 @@ all of the below live, in both light and dark.
 
 ## App icon
 
-Same "j!" mark, restated in flat Material color:
-- Solid `--accent` fill (`#0b57d0`), no gradient.
-- Material "squircle" corner radius (~22%), slightly less rounded than v2's app
-  icon so it doesn't read as an iOS icon.
-- No gloss/highlight overlay — flat color only, per the "flat not glossy" principle.
+Keep the current Jot it! logo and extension icons unless a future task
+explicitly asks for a logo redesign. The panel header should use the existing
+icon asset without adding gloss, gradients, or extra decorative treatment around
+it.
 
 ## What NOT to do
 

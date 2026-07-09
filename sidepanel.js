@@ -28,6 +28,12 @@ const toolbar = document.querySelector(".toolbar");
 const editorStack = document.querySelector(".editor-stack");
 const statusMessage = document.getElementById("statusMessage");
 const contextSuggestion = document.getElementById("contextSuggestion");
+const wordCount = document.getElementById("wordCount");
+const characterCount = document.getElementById("characterCount");
+const selectionCapture = document.getElementById("selectionCapture");
+const selectionPreview = document.getElementById("selectionPreview");
+const addSelectionBtn = document.getElementById("addSelectionBtn");
+const dismissSelectionBtn = document.getElementById("dismissSelectionBtn");
 
 const NoteUtils = window.NoteUtils;
 if (!NoteUtils) {
@@ -41,6 +47,7 @@ const {
   slugify,
   buildFilename,
   normalizeUrl,
+  normalizeImageSrc,
   htmlToMarkdown,
   markdownToHtml,
   getActiveTab,
@@ -49,6 +56,24 @@ const {
 const CONTEXT_KEY = "contextByHost";
 const DEBUG_KEY = "debugLogsEnabled";
 const TITLE_LOCK_KEY = "titleLockEnabled";
+const MAX_PASTED_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_EXPORTED_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_IMAGES_PER_PASTE = 8;
+const SUPPORTED_IMAGE_TYPES = new Map([
+  ["image/png", "png"],
+  ["image/jpeg", "jpg"],
+  ["image/gif", "gif"],
+  ["image/webp", "webp"],
+  ["image/avif", "avif"],
+]);
+const SUPPORTED_IMAGE_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "avif",
+]);
 const userAgent = navigator.userAgent || "";
 const chromeVersionMatch = userAgent.match(/\bChrome\/(\d+)\./i);
 const chromeMajorVersion = chromeVersionMatch
@@ -71,6 +96,7 @@ let panelTabId = null;
 let lastNotesRange = null;
 let lastNotesInserted = { text: "", url: "" };
 let lastNotesInsertedAt = 0;
+let pendingPageSelection = null;
 let lastCaretOffset = null;
 let pageHistory = [];
 let debugEnabled = false;
@@ -102,12 +128,14 @@ const showToast = (
   statusMessage.textContent = message || "";
   statusMessage.classList.toggle("is-visible", Boolean(message));
   statusMessage.classList.toggle("is-error", variant === "error");
+  statusMessage.classList.toggle("is-ambient", variant === "ambient");
   if (timeoutMs > 0) {
     toastTimer = window.setTimeout(() => {
       if (statusMessage.textContent === message) {
         statusMessage.textContent = "";
         statusMessage.classList.remove("is-visible");
         statusMessage.classList.remove("is-error");
+        statusMessage.classList.remove("is-ambient");
       }
     }, timeoutMs);
   }
@@ -215,6 +243,32 @@ const debounce = (fn, wait = 250) => {
   };
 };
 
+const getSelectionPreviewText = (text) => {
+  const normalized = (text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  return normalized.length > 110
+    ? `${normalized.slice(0, 107).trim()}...`
+    : normalized;
+};
+
+const clearPendingPageSelection = () => {
+  pendingPageSelection = null;
+  if (selectionCapture) {
+    selectionCapture.hidden = true;
+  }
+  if (selectionPreview) {
+    selectionPreview.textContent = "";
+  }
+};
+
+const showPendingPageSelection = (selection) => {
+  const preview = getSelectionPreviewText(selection?.text || "");
+  if (!preview || !selectionCapture || !selectionPreview) return;
+  pendingPageSelection = selection;
+  selectionPreview.textContent = preview;
+  selectionCapture.hidden = false;
+};
+
 
 const storageState = { refreshed: {} };
 
@@ -301,29 +355,16 @@ const recordPageVisit = (url, title) => {
   }
 };
 
-const buildVisitedPagesMarkdown = () => {
-  const valid = pageHistory.filter((entry) => normalizeUrl(entry.url) === entry.url);
-  if (!valid.length) return "";
-  const lines = valid.map((entry) => {
-    if (entry.title && entry.title !== entry.url) {
-      return `- [${entry.title}](${entry.url})`;
-    }
-    return `- ${entry.url}`;
-  });
-  return `---\n\n## Pages visited\n${lines.join("\n")}\n`;
-};
-
-const buildVisitedPagesText = () => {
-  const valid = pageHistory.filter((entry) => normalizeUrl(entry.url) === entry.url);
-  if (!valid.length) return "";
-  const lines = valid.map((entry) => {
-    if (entry.title && entry.title !== entry.url) {
-      return `- ${entry.title} — ${entry.url}`;
-    }
-    return `- ${entry.url}`;
-  });
-  return `\n---\nPages visited:\n${lines.join("\n")}\n`;
-};
+const getVisitedPagesForFrontmatter = () =>
+  pageHistory
+    .filter((entry) => normalizeUrl(entry.url) === entry.url)
+    .map((entry) => ({
+      title:
+        typeof entry.title === "string" && entry.title.trim()
+          ? entry.title.trim()
+          : entry.url,
+      url: entry.url,
+    }));
 
 const removeLegacySourceLines = () => {
   const candidates = notesInput.querySelectorAll("p");
@@ -649,6 +690,7 @@ const applyFormat = (format) => {
       break;
   }
 
+  updateEditorStats();
   debouncedSaveDraft();
   updateToolbarState();
 };
@@ -717,16 +759,295 @@ const updateToolbarState = () => {
   buttons.ol?.classList.toggle("active", orderedActive);
 };
 
+const pluralize = (count, singular, plural = `${singular}s`) =>
+  `${count} ${count === 1 ? singular : plural}`;
+
+const countWords = (text) => {
+  const normalized = (text || "").trim();
+  if (!normalized) return 0;
+  if (typeof Intl !== "undefined" && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+    return Array.from(segmenter.segment(normalized)).filter(
+      (segment) => segment.isWordLike
+    ).length;
+  }
+  return normalized.split(/\s+/).filter(Boolean).length;
+};
+
+const getEditorSelectionText = () => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return "";
+  }
+  if (
+    !notesInput.contains(selection.anchorNode) ||
+    !notesInput.contains(selection.focusNode)
+  ) {
+    return "";
+  }
+  return selection.toString();
+};
+
+const updateEditorStats = () => {
+  if (!wordCount || !characterCount) return;
+  const selectedText = getEditorSelectionText();
+  const text = selectedText || notesInput.textContent || "";
+  const words = countWords(text);
+  const characters = text.length;
+  wordCount.textContent = pluralize(words, "word");
+  characterCount.textContent = pluralize(characters, "character");
+};
+
+const getImageExtensionFromUrl = (value) => {
+  try {
+    const parsed = new URL(value);
+    const extension = parsed.pathname.split(".").pop()?.toLowerCase() || "";
+    return SUPPORTED_IMAGE_EXTENSIONS.has(extension) ? extension : "";
+  } catch (error) {
+    return "";
+  }
+};
+
+const getDataImageType = (value) => {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,/i.exec(value || "");
+  const mimeType = match?.[1]?.toLowerCase() || "";
+  return SUPPORTED_IMAGE_TYPES.has(mimeType) ? mimeType : "";
+};
+
+const getImageExtension = (src, fallbackType = "") => {
+  const dataType = getDataImageType(src);
+  if (dataType) return SUPPORTED_IMAGE_TYPES.get(dataType);
+  if (fallbackType && SUPPORTED_IMAGE_TYPES.has(fallbackType)) {
+    return SUPPORTED_IMAGE_TYPES.get(fallbackType);
+  }
+  return getImageExtensionFromUrl(src) || "png";
+};
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsDataURL(file);
+  });
+
+const dataUrlToBlob = async (dataUrl) => {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/i.exec(
+    dataUrl || ""
+  );
+  if (!match) {
+    throw new Error("Unsupported image data.");
+  }
+  const mimeType = match[1].toLowerCase();
+  if (!SUPPORTED_IMAGE_TYPES.has(mimeType)) {
+    throw new Error("Unsupported image type.");
+  }
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
+};
+
+const createRemoteImagePlaceholder = ({ src, alt }) => {
+  const figure = document.createElement("figure");
+  figure.className = "image-attachment";
+  figure.contentEditable = "false";
+  figure.dataset.jotImageSrc = src;
+  figure.dataset.jotImageAlt = alt || "Image";
+  const badge = document.createElement("span");
+  badge.className = "image-attachment__badge";
+  badge.textContent = "Image";
+  const caption = document.createElement("figcaption");
+  caption.textContent = alt || "Web image";
+  figure.append(badge, caption);
+  return figure;
+};
+
+const createEditorImageNode = ({ src, alt = "Image" }) => {
+  const safeSrc = normalizeImageSrc(src);
+  if (!safeSrc) return null;
+  if (/^data:/i.test(safeSrc)) {
+    const img = document.createElement("img");
+    img.src = safeSrc;
+    img.alt = alt;
+    return img;
+  }
+  return createRemoteImagePlaceholder({ src: safeSrc, alt });
+};
+
+const insertImageIntoEditor = ({ src, alt = "Image" }) => {
+  const imageNode = createEditorImageNode({ src, alt });
+  if (!imageNode) return false;
+  notesInput.focus();
+  const block = document.createElement("p");
+  block.appendChild(imageNode);
+  const spacer = document.createElement("p");
+  spacer.appendChild(document.createElement("br"));
+  const fragment = document.createDocumentFragment();
+  fragment.append(block, spacer);
+  const range = getInsertRange();
+  if (!range) {
+    notesInput.appendChild(fragment);
+  } else {
+    range.deleteContents();
+    range.insertNode(fragment);
+    range.setStartAfter(spacer);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    lastNotesRange = range.cloneRange();
+  }
+  updateEditorStats();
+  debouncedSaveDraft();
+  return true;
+};
+
+const getClipboardImageFiles = (clipboard) => {
+  const items = Array.from(clipboard?.items || []);
+  return items
+    .filter(
+      (item) =>
+        item.kind === "file" &&
+        SUPPORTED_IMAGE_TYPES.has((item.type || "").toLowerCase())
+    )
+    .map((item) => item.getAsFile())
+    .filter(Boolean)
+    .slice(0, MAX_IMAGES_PER_PASTE);
+};
+
+const getClipboardHtmlImages = (clipboard) => {
+  const html = clipboard?.getData("text/html") || "";
+  if (!html.trim()) return [];
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return Array.from(doc.querySelectorAll("img"))
+    .map((img) => ({
+      src: normalizeImageSrc(img.currentSrc || img.src || img.getAttribute("src") || ""),
+      alt: img.getAttribute("alt") || "Web image",
+    }))
+    .filter((image) => image.src)
+    .slice(0, MAX_IMAGES_PER_PASTE);
+};
+
+const insertPastedImageFiles = async (files) => {
+  let inserted = 0;
+  for (const file of files) {
+    const mimeType = (file.type || "").toLowerCase();
+    if (!SUPPORTED_IMAGE_TYPES.has(mimeType)) continue;
+    if (file.size > MAX_PASTED_IMAGE_BYTES) {
+      showToast("Image is too large to paste.", {
+        timeoutMs: 2600,
+        variant: "error",
+      });
+      continue;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      if (insertImageIntoEditor({ src: dataUrl, alt: file.name || "Pasted image" })) {
+        inserted += 1;
+      }
+    } catch (error) {
+      reportError("Couldn't paste image.", error);
+    }
+  }
+  if (inserted) {
+    showToast("Image added.", { timeoutMs: 1600 });
+  }
+};
+
+const insertRemoteImages = (images) => {
+  const inserted = images.filter((image) => insertImageIntoEditor(image)).length;
+  if (inserted) {
+    showToast("Image reference added.", { timeoutMs: 1600 });
+  }
+};
+
+const toAttachmentSafeName = (value, fallback = "image") =>
+  slugify(value || fallback).replace(/^-+|-+$/g, "") || fallback;
+
+const buildObsidianImageExport = async (markdown, noteFilename) => {
+  const noteBase = toAttachmentSafeName(noteFilename.replace(/\.md$/i, ""), "note");
+  const attachments = [];
+  let output = "";
+  let lastIndex = 0;
+  const imageRegex = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+  let match;
+  while ((match = imageRegex.exec(markdown))) {
+    const [fullMatch, rawAlt, rawSrc] = match;
+    const src = normalizeImageSrc(rawSrc);
+    if (!src) continue;
+    output += markdown.slice(lastIndex, match.index);
+    lastIndex = match.index + fullMatch.length;
+    const alt = rawAlt?.trim() || "Image";
+    const extension = getImageExtension(src);
+    const attachmentFilename = `${noteBase}-image-${attachments.length + 1}.${extension}`;
+    const relativePath = `attachments/${attachmentFilename}`;
+    output += `![${alt.replace(/[\[\]\n\r]/g, " ")}](${relativePath})`;
+    if (/^data:/i.test(src)) {
+      attachments.push({
+        kind: "blob",
+        path: relativePath,
+        blob: await dataUrlToBlob(src),
+      });
+    } else {
+      attachments.push({
+        kind: "remote",
+        path: relativePath,
+        url: src,
+      });
+    }
+  }
+  output += markdown.slice(lastIndex);
+  return { markdown: output, attachments };
+};
+
+const toYamlString = (value) => JSON.stringify(String(value || ""));
+
+const getLocalDateTimeParts = (value) => {
+  const parsed = value ? new Date(value) : new Date();
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const datePart = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(
+    date.getDate()
+  )}`;
+  const timePart = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  return {
+    date: datePart,
+    time: timePart,
+    datetime: `${datePart}T${timePart}`,
+  };
+};
+
+const buildYamlFrontmatter = ({ title, meetingDate }) => {
+  const { date, time, datetime } = getLocalDateTimeParts(meetingDate);
+  const pages = getVisitedPagesForFrontmatter();
+  const lines = [
+    "---",
+    `title: ${toYamlString(title)}`,
+    `date: ${date}`,
+    `time: ${toYamlString(time)}`,
+    `datetime: ${toYamlString(datetime)}`,
+  ];
+  if (pages.length) {
+    lines.push("pages_visited:");
+    pages.forEach((page) => {
+      lines.push(`  - title: ${toYamlString(page.title)}`);
+      lines.push(`    url: ${toYamlString(page.url)}`);
+    });
+  } else {
+    lines.push("pages_visited: []");
+  }
+  lines.push("---");
+  return lines.join("\n");
+};
+
 const buildMarkdown = ({ meetingName, meetingDate, notes }) => {
   const title = sanitizeMeetingName(meetingName);
-  const parsedDate = meetingDate ? new Date(meetingDate) : new Date();
-  const dateLine = formatDateTime(parsedDate);
   const body = notes.trim() ? `${notes.trim()}\n` : "";
-  const visitedSection = buildVisitedPagesMarkdown();
+  const frontmatter = buildYamlFrontmatter({ title, meetingDate });
 
-  return `# ${title}\n\n- Date: ${dateLine}\n\n---\n\n${body}${
-    visitedSection ? `\n${visitedSection}` : ""
-  }`;
+  return `${frontmatter}\n\n# ${title}\n\n${body}`;
 };
 
 const getFormData = () => ({
@@ -751,13 +1072,18 @@ const setFormData = ({ meetingName, meetingDate, notes, pageUrl }) => {
   currentPageUrl = pageUrl || currentPageUrl;
   notesInput.innerHTML = markdownToHtml(notes || "");
   removeLegacySourceLines();
+  updateEditorStats();
 };
 
 const saveDraft = async () => {
   const draft = getDraftData();
   try {
     await storageSet({ [STORAGE_KEY]: draft });
-    showToast("Saved locally", { timeoutMs: 1400, minIntervalMs: 5000 });
+    showToast("Saved locally", {
+      timeoutMs: 1600,
+      minIntervalMs: 5000,
+      variant: "ambient",
+    });
   } catch (error) {
     reportError("Couldn't save draft locally.", error);
   }
@@ -787,8 +1113,17 @@ const downloadMarkdown = (
   filename,
   { saveAs, conflictAction, mimeType = "text/markdown" }
 ) =>
+  downloadBlob(new Blob([markdown], { type: mimeType }), filename, {
+    saveAs,
+    conflictAction,
+  });
+
+const downloadBlob = (
+  blob,
+  filename,
+  { saveAs = false, conflictAction = "uniquify" } = {}
+) =>
   new Promise((resolve, reject) => {
-    const blob = new Blob([markdown], { type: mimeType });
     const url = URL.createObjectURL(blob);
     chrome.downloads.download(
       {
@@ -808,6 +1143,91 @@ const downloadMarkdown = (
     );
   });
 
+const fetchRemoteAttachmentBlob = async (url) => {
+  const safeUrl = normalizeImageSrc(url);
+  if (!safeUrl || /^data:/i.test(safeUrl)) {
+    throw new Error("Unsupported image URL.");
+  }
+  const response = await fetch(safeUrl, {
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
+  });
+  if (!response.ok) {
+    throw new Error(`Image download failed (${response.status}).`);
+  }
+  const contentLength = Number(response.headers.get("content-length") || 0);
+  if (contentLength > MAX_EXPORTED_IMAGE_BYTES) {
+    throw new Error("Image is too large to export.");
+  }
+  const contentType = (response.headers.get("content-type") || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+  if (!SUPPORTED_IMAGE_TYPES.has(contentType)) {
+    throw new Error("Downloaded file is not a supported image.");
+  }
+  const blob = await response.blob();
+  if (blob.size > MAX_EXPORTED_IMAGE_BYTES) {
+    throw new Error("Image is too large to export.");
+  }
+  return blob;
+};
+
+const downloadImageAttachments = async (attachments, exportRoot = "") => {
+  for (const attachment of attachments) {
+    const filename = exportRoot
+      ? `${exportRoot}/${attachment.path}`
+      : attachment.path;
+    if (attachment.kind === "blob") {
+      await downloadBlob(attachment.blob, filename, {
+        saveAs: false,
+        conflictAction: "overwrite",
+      });
+    } else if (attachment.kind === "remote") {
+      await downloadBlob(await fetchRemoteAttachmentBlob(attachment.url), filename, {
+        saveAs: false,
+        conflictAction: "overwrite",
+      });
+    }
+  }
+};
+
+const writeBlobFile = async (directoryHandle, filename, blob) => {
+  const fileHandle = await directoryHandle.getFileHandle(filename, {
+    create: true,
+  });
+  const writable = await fileHandle.createWritable();
+  try {
+    await writable.write(blob);
+  } finally {
+    await writable.close();
+  }
+};
+
+const writeTextFile = (directoryHandle, filename, text, mimeType) =>
+  writeBlobFile(directoryHandle, filename, new Blob([text], { type: mimeType }));
+
+const writeAttachmentsToDirectory = async (directoryHandle, attachments) => {
+  if (!attachments.length) return;
+  const attachmentsDirectory = await directoryHandle.getDirectoryHandle(
+    "attachments",
+    { create: true }
+  );
+  for (const attachment of attachments) {
+    const filename = attachment.path.split("/").pop();
+    if (!filename) continue;
+    if (attachment.kind === "blob") {
+      await writeBlobFile(attachmentsDirectory, filename, attachment.blob);
+    } else if (attachment.kind === "remote") {
+      await writeBlobFile(
+        attachmentsDirectory,
+        filename,
+        await fetchRemoteAttachmentBlob(attachment.url)
+      );
+    }
+  }
+};
+
 const toDownloadFilename = (value) => {
   const fallbackName = "note.md";
   const raw = typeof value === "string" ? value : "";
@@ -823,31 +1243,50 @@ const handleSave = async () => {
   const data = getFormData();
   const filename = buildFilename(data);
   const downloadFilename = toDownloadFilename(filename);
-  const markdown = buildMarkdown(data);
-
-  const payload = markdown;
+  const exportData = await buildObsidianImageExport(
+    buildMarkdown(data),
+    downloadFilename
+  );
+  const hasAttachments = exportData.attachments.length > 0;
+  const exportRoot = hasAttachments
+    ? toAttachmentSafeName(downloadFilename.replace(/\.md$/i, ""), "jot-it-note")
+    : "";
+  const payload = exportData.markdown;
   const mimeType = "text/markdown";
+  const noteDownloadFilename = exportRoot
+    ? `${exportRoot}/${downloadFilename}`
+    : downloadFilename;
 
   try {
-    await downloadMarkdown(payload, downloadFilename, {
+    await downloadMarkdown(payload, noteDownloadFilename, {
       saveAs: false,
       conflictAction: "uniquify",
       mimeType,
     });
+    await downloadImageAttachments(exportData.attachments, exportRoot);
   } catch (error) {
+    if (hasAttachments) {
+      reportError("Image export failed. Please try again.", error);
+      window.alert("Image export failed. Please try again.");
+      return;
+    }
     try {
-      await downloadMarkdown(payload, downloadFilename, {
+      await downloadMarkdown(payload, noteDownloadFilename, {
         saveAs: true,
         conflictAction: "uniquify",
         mimeType,
       });
+      await downloadImageAttachments(exportData.attachments, exportRoot);
     } catch (fallbackError) {
       reportError("Save failed. Please try again.", fallbackError);
       window.alert("Save failed. Please try again.");
       return;
     }
   }
-  showToast("Exported to Downloads", { timeoutMs: 1800 });
+  showToast(
+    hasAttachments ? "Exported note folder to Downloads" : "Exported to Downloads",
+    { timeoutMs: 1800 }
+  );
   notesInput.focus();
 };
 
@@ -855,15 +1294,64 @@ const handleSaveAs = async () => {
   const data = getFormData();
   const filename = buildFilename(data);
   const downloadFilename = toDownloadFilename(filename);
-  const markdown = buildMarkdown(data);
+  let directoryHandle = null;
+  if (typeof window.showDirectoryPicker === "function") {
+    try {
+      directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      reportError("Couldn't open folder picker.", error);
+      return;
+    }
+  }
+  const exportData = await buildObsidianImageExport(
+    buildMarkdown(data),
+    downloadFilename
+  );
+  const hasAttachments = exportData.attachments.length > 0;
+  const exportRoot = hasAttachments
+    ? toAttachmentSafeName(downloadFilename.replace(/\.md$/i, ""), "jot-it-note")
+    : "";
+  const noteDownloadFilename = exportRoot
+    ? `${exportRoot}/${downloadFilename}`
+    : downloadFilename;
+
+  if (directoryHandle) {
+    try {
+      await writeTextFile(
+        directoryHandle,
+        downloadFilename,
+        exportData.markdown,
+        "text/markdown"
+      );
+      await writeAttachmentsToDirectory(
+        directoryHandle,
+        exportData.attachments
+      );
+      showToast(
+        hasAttachments ? "Saved note and attachments." : "File saved.",
+        { timeoutMs: 1800 }
+      );
+      notesInput.focus();
+      return;
+    } catch (error) {
+      reportError("Save failed. Please try another folder.", error);
+      window.alert("Save failed. Please try another folder.");
+      return;
+    }
+  }
 
   try {
-    await downloadMarkdown(markdown, downloadFilename, {
-      saveAs: true,
+    await downloadMarkdown(exportData.markdown, noteDownloadFilename, {
+      saveAs: !hasAttachments,
       conflictAction: "uniquify",
       mimeType: "text/markdown",
     });
-    showToast("File saved.", { timeoutMs: 1800 });
+    await downloadImageAttachments(exportData.attachments, exportRoot);
+    showToast(
+      hasAttachments ? "Exported note folder to Downloads" : "File saved.",
+      { timeoutMs: 1800 }
+    );
     notesInput.focus();
   } catch (error) {
     reportError("Save failed. Please try again.", error);
@@ -890,16 +1378,18 @@ const handleClear = async () => {
   }
   resetEditorFormatting();
   notesInput.innerHTML = "";
+  updateEditorStats();
   notesInput.focus();
 };
 
 chrome.runtime.onMessage.addListener((message, sender) => {
-  if (!message || message.type !== "PAGE_SELECTION") return;
+  if (!message) return;
+  if (message.type !== "PAGE_SELECTION_CANDIDATE") return;
   if (typeof message.text !== "string" || !message.text.trim()) return;
   const now = Date.now();
   const incomingUrl =
     typeof message.url === "string" ? message.url : "";
-  debugLog("PAGE_SELECTION received", {
+  debugLog("PAGE_SELECTION_CANDIDATE received", {
     length: message.text.length,
     url: incomingUrl,
     tabId: message.tabId,
@@ -909,7 +1399,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     incomingUrl === lastNotesInserted.url &&
     now - lastNotesInsertedAt < 1000
   ) {
-    debugLog("PAGE_SELECTION deduped", { url: incomingUrl });
+    debugLog("PAGE_SELECTION_CANDIDATE deduped", { url: incomingUrl });
     return;
   }
   const senderTabId = Number.isInteger(message.tabId)
@@ -918,15 +1408,28 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (isStandalone && Number.isInteger(sourceTabId)) {
     if (senderTabId !== sourceTabId) return;
   }
-  if (message.url || message.title) {
-    recordPageVisit(message.url, message.title);
-  }
-  insertSelectionWithLink(message.text, message.url || currentPageUrl);
-  debugLog("selection inserted", { url: message.url || currentPageUrl });
-  lastNotesInserted = { text: message.text, url: incomingUrl };
-  lastNotesInsertedAt = now;
-  debouncedSaveDraft();
+  showPendingPageSelection({
+    text: message.text,
+    url: message.url || currentPageUrl,
+    title: message.title || "",
+    tabId: senderTabId,
+    receivedAt: now,
+  });
 });
+
+const addPendingPageSelection = () => {
+  if (!pendingPageSelection?.text?.trim()) return;
+  const selection = pendingPageSelection;
+  if (selection.url || selection.title) {
+    recordPageVisit(selection.url, selection.title);
+  }
+  insertSelectionWithLink(selection.text, selection.url || currentPageUrl);
+  debugLog("selection inserted", { url: selection.url || currentPageUrl });
+  lastNotesInserted = { text: selection.text, url: selection.url || "" };
+  lastNotesInsertedAt = Date.now();
+  clearPendingPageSelection();
+  debouncedSaveDraft();
+};
 const handleMeetingNameInput = () => {
   const value = meetingNameInput.value.trim();
   userEditedTitle = value !== "" && value !== lastAutoTitle;
@@ -987,6 +1490,7 @@ const insertSelectionWithLink = (text, url) => {
   const range = getInsertRange();
   if (!range) {
     notesInput.appendChild(fragment);
+    updateEditorStats();
     return;
   }
   range.deleteContents();
@@ -997,6 +1501,7 @@ const insertSelectionWithLink = (text, url) => {
   selection.removeAllRanges();
   selection.addRange(range);
   lastNotesRange = range.cloneRange();
+  updateEditorStats();
 };
 
 const attachTabListeners = () => {
@@ -1208,6 +1713,7 @@ const init = async () => {
     resetEditorFormatting();
   }
   updateToolbarState();
+  updateEditorStats();
   updateContextSuggestion();
   syncPanelOpenState();
 };
@@ -1234,16 +1740,31 @@ contextSuggestion?.addEventListener("click", () => {
   debouncedSaveDraft();
   updateContextSuggestion();
 });
+addSelectionBtn?.addEventListener("click", addPendingPageSelection);
+dismissSelectionBtn?.addEventListener("click", clearPendingPageSelection);
 notesInput.addEventListener("keyup", storeNotesSelection);
 notesInput.addEventListener("mouseup", storeNotesSelection);
 notesInput.addEventListener("focus", storeNotesSelection);
 notesInput.addEventListener("input", () => {
   storeNotesSelection();
+  updateEditorStats();
   debouncedSaveDraft();
 });
 notesInput.addEventListener("paste", (event) => {
   const clipboard = event.clipboardData;
   if (!clipboard) return;
+  const imageFiles = getClipboardImageFiles(clipboard);
+  if (imageFiles.length) {
+    event.preventDefault();
+    insertPastedImageFiles(imageFiles);
+    return;
+  }
+  const htmlImages = getClipboardHtmlImages(clipboard);
+  if (htmlImages.length) {
+    event.preventDefault();
+    insertRemoteImages(htmlImages);
+    return;
+  }
   event.preventDefault();
   const text = clipboard.getData("text/plain");
   document.execCommand("insertText", false, text || "");
@@ -1400,9 +1921,13 @@ toolbar?.addEventListener("click", (e) => {
 });
 
 document.addEventListener("selectionchange", updateToolbarState);
+document.addEventListener("selectionchange", updateEditorStats);
 notesInput.addEventListener("keyup", updateToolbarState);
+notesInput.addEventListener("keyup", updateEditorStats);
 notesInput.addEventListener("mouseup", updateToolbarState);
+notesInput.addEventListener("mouseup", updateEditorStats);
 notesInput.addEventListener("focus", updateToolbarState);
+notesInput.addEventListener("focus", updateEditorStats);
 
 editorStack?.addEventListener("focusin", updateEditorStackFocus);
 editorStack?.addEventListener("focusout", () => {

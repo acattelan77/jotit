@@ -444,19 +444,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
-  if (message.type === "PAGE_SELECTION" && sender?.tab?.id) {
+  if (message.type === "PAGE_SELECTION_CANDIDATE" && sender?.tab?.id) {
     const tabId = sender.tab.id;
     const panelVisibleForTab =
       openPanelTabs.has(tabId) || hasDetachedWindowForTab(tabId);
     if (!panelVisibleForTab) {
-      debugLog("background", "PAGE_SELECTION dropped (panel closed)", {
+      debugLog("background", "PAGE_SELECTION_CANDIDATE dropped (panel closed)", {
         tabId,
         url: message.url || "",
       });
       sendResponse({ ok: true, dropped: true });
       return;
     }
-    debugLog("background", "PAGE_SELECTION", {
+    debugLog("background", "PAGE_SELECTION_CANDIDATE", {
       tabId,
       textLength: typeof message.text === "string" ? message.text.length : 0,
       url: message.url || "",
@@ -466,7 +466,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       typeof sender.tab.title === "string" ? sender.tab.title : "";
     chrome.runtime.sendMessage(
       {
-        type: "PAGE_SELECTION",
+        type: "PAGE_SELECTION_CANDIDATE",
         text: message.text,
         tabId,
         url: message.url || fallbackUrl,
@@ -475,7 +475,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       () => {
         if (chrome.runtime.lastError) {
           // No side panel listening; ignore.
-          debugLog("background", "PAGE_SELECTION forward failed", {
+          debugLog("background", "PAGE_SELECTION_CANDIDATE forward failed", {
             error: chrome.runtime.lastError?.message || "",
           });
         }

@@ -1,116 +1,139 @@
 # Jot it! Go-Live Plan
 
 ## Goal
-Ship `Jot it!` to the Chrome Web Store with compliant listing assets, accurate privacy disclosures, and low review risk.
+
+Publish Jot it! to the Chrome Web Store with accurate product copy, matching
+privacy disclosures, verified permissions, and a clean release package.
 
 ## Scope
-- Extension code and manifest readiness
-- Chrome Web Store listing assets and metadata
-- Privacy and permissions compliance
-- Final QA, packaging, submission, and immediate post-launch checks
+
+- Chrome extension code and manifest readiness.
+- Chrome Web Store listing copy and screenshots.
+- Privacy and permission disclosures.
+- Manual QA, packaging, submission, and post-launch checks.
 
 ## Release Gates
-- [ ] Gate 1: Product behavior stable on current Chrome stable (macOS + Windows)
-- [ ] Gate 2: Listing assets meet Chrome Web Store requirements
-- [ ] Gate 3: Privacy/data usage disclosures match real behavior
-- [ ] Gate 4: Permissions are minimal and clearly justified
-- [ ] Gate 5: Package and metadata are final, reviewed, and versioned
 
-## Phase 1: Code and Manifest Hardening (Day 1)
-- [ ] Bump extension version in `/Users/alessandrocattelan/Dev/Jot it!/manifest.json`
-- [ ] Verify permissions are still required:
-  - `sidePanel`, `storage`, `downloads`, `tabs`, `scripting`
-- [ ] Re-evaluate host permissions in `/Users/alessandrocattelan/Dev/Jot it!/manifest.json`:
-  - Current: `http://*/*`, `https://*/*`
-  - Decide whether to keep broad access or move to a stricter/optional model
-- [ ] Smoke-test export behavior on target Chrome versions
-- [ ] Confirm no console/runtime errors in service worker or panel
+- [ ] Gate 1: Core note-taking behavior works on current Chrome stable.
+- [ ] Gate 2: Store listing copy accurately describes the extension.
+- [ ] Gate 3: Privacy and data-use disclosures match runtime behavior.
+- [ ] Gate 4: Permissions are minimal, justified, and explainable.
+- [ ] Gate 5: Package contents are final, reviewed, and versioned.
 
-## Phase 2: Store Asset Production (Day 1-2)
-- [ ] Update asset generator output targets to current CWS-friendly set:
-  - Small promo tile `440x280`
-  - Screenshots `1280x800`
-  - Marquee `1400x560` (optional)
-- [ ] Generate icon set and listing art from `/Users/alessandrocattelan/Dev/Jot it!/scripts/generate_store_assets.mjs`
-- [ ] Capture real product screenshots from actual extension UI (not mockups)
-- [ ] Curate final assets folder for submission:
-  - Store icon (128x128)
-  - Small promo tile
-  - Marquee (if used)
-  - At least 3 screenshots
+## Phase 1: Product And Manifest Review
 
-## Phase 3: Privacy and Policy Alignment (Day 2)
-- [ ] Verify `/Users/alessandrocattelan/Dev/Jot it!/PRIVACY.md` reflects actual runtime behavior:
-  - Selected text capture
-  - Active-page context usage
-  - Local storage behavior
-  - Export paths and file generation
-- [ ] Fill Chrome Web Store privacy/data usage fields to match actual behavior exactly
-- [ ] Prepare clear permission rationale text for listing:
-  - Why each permission is needed
-  - What user benefit it unlocks
-  - What is not collected/transmitted
+- [ ] Bump the version in `manifest.json`.
+- [ ] Keep the visible version in `sidepanel.html` in sync.
+- [ ] Verify the manifest description still matches the product.
+- [ ] Recheck required permissions:
+  - `sidePanel` for the Chrome side-panel UI.
+  - `storage` for local draft and preferences.
+  - `downloads` for Markdown export.
+  - `tabs` for active page title and URL context.
+  - `scripting` for the selected-text helper.
+  - `http://*/*` and `https://*/*` for selected-text insertion on web pages.
+- [ ] Confirm the content security policy still avoids remote scripts,
+  `unsafe-eval`, and `unsafe-inline`.
 
-## Phase 4: Listing Readiness (Day 2-3)
+## Phase 2: Functional QA
+
+- [ ] Open the side panel from the toolbar action.
+- [ ] Open the side panel from the extension command.
+- [ ] Confirm title/context autofill from the active page.
+- [ ] Confirm title lock and per-site context suggestion behavior.
+- [ ] Confirm date and time controls.
+- [ ] Confirm editor formatting and Markdown conversion.
+- [ ] Confirm selected page text appears as a pending **Add selection** action
+  only while Jot it! is open for the tab.
+- [ ] Confirm pasted local images export as Obsidian-compatible attachments.
+- [ ] Confirm explicitly copied and pasted web images export safely.
+- [ ] Confirm date, time, and pages visited export as YAML frontmatter.
+- [ ] Confirm local draft restore after closing and reopening the panel.
+- [ ] Confirm direct export to Downloads.
+- [ ] Confirm Save As export.
+- [ ] Confirm detach and reattach behavior.
+- [ ] Confirm the current design system in light and dark mode.
+- [ ] Confirm there are no service-worker or side-panel console errors.
+
+## Phase 3: Privacy And Store Disclosures
+
+- [ ] Verify `PRIVACY.md` describes the current behavior exactly:
+  - local draft storage;
+  - active page title and URL context;
+  - selected-text handling;
+  - pasted local image and copied web image handling;
+  - Markdown export through Chrome Downloads;
+  - user-initiated image attachment downloads;
+  - no analytics or tracking.
+- [ ] Fill Chrome Web Store privacy fields to match the policy.
+- [ ] Prepare concise permission rationale text for each requested permission.
+- [ ] Confirm the listing presents the extension as a single-purpose side-panel
+  note-taking tool.
+
+## Phase 4: Listing Materials
+
 - [ ] Finalize listing metadata:
-  - Name
-  - Short summary
-  - Full description
-  - Category
-  - Support and privacy URLs
-- [ ] Ensure listing emphasizes single-purpose utility (quick side-panel notes)
-- [ ] Proofread for clarity and consistency with in-product wording
+  - name;
+  - short summary;
+  - full description;
+  - category;
+  - support URL;
+  - privacy URL.
+- [ ] Capture screenshots from the real extension UI.
+- [ ] Verify the current logo and icons appear clearly in Chrome's required
+  preview sizes.
+- [ ] Proofread all listing copy against the actual UI labels.
 
-## Phase 5: QA and Packaging (Day 3)
-- [ ] Run a full functional pass:
-  - Open side panel
-  - Capture selection
-  - Edit/format note
-  - Export (default and Save As flow)
-  - Detach/reattach workflow
-  - Settings interactions
-- [ ] Validate icon rendering in:
-  - Toolbar
-  - Extensions page
-  - Store icon preview
-- [ ] Build final upload ZIP with runtime files only:
+## Phase 5: Packaging
+
+- [ ] Build the upload ZIP from runtime files only:
   - `manifest.json`
   - `background.js`
   - `content-selection.js`
-  - `sidepanel.js`
-  - `sidepanel.css`
   - `sidepanel.html`
-  - `icons/`
+  - `sidepanel.css`
+  - `sidepanel.js`
   - `lib/`
-- [ ] Verify ZIP contents before upload
+  - `icons/`
+  - `fonts/`
+- [ ] Exclude development-only files:
+  - design-system references;
+  - local settings;
+  - screenshots;
+  - git metadata;
+  - documentation not needed at runtime.
+- [ ] Install the packaged ZIP locally and run the release smoke test.
 
-## Phase 6: Submission and Launch (Day 3)
-- [ ] Upload package and listing assets to Chrome Web Store dashboard
-- [ ] Complete privacy and permissions sections
-- [ ] Run dashboard validation and resolve warnings
-- [ ] Submit for review
-- [ ] Record submission date/time and review status
+## Phase 6: Submission
 
-## Phase 7: Post-Submission and Post-Launch (Day 3+)
-- [ ] Track review feedback and respond quickly
-- [ ] If changes requested, patch and resubmit same day
-- [ ] After publish, run production sanity check:
-  - Install from store
-  - Open panel
-  - Save/export note
-  - Verify no regressions
-- [ ] Prepare patch-release playbook for first 7 days
+- [ ] Upload the ZIP and listing materials to the Chrome Web Store dashboard.
+- [ ] Complete privacy and permissions sections.
+- [ ] Resolve dashboard warnings.
+- [ ] Submit for review.
+- [ ] Record submission date, version, and review status.
 
-## Risks and Mitigations
-- Risk: Asset rejection due to wrong dimensions or non-representative screenshots
-  - Mitigation: Use exact target sizes and real UI screenshots
-- Risk: Privacy/permission review delays
-  - Mitigation: Keep disclosures specific and aligned with code behavior
-- Risk: Browser-specific export edge cases
-  - Mitigation: Validate on current Chrome stable and confirm fallback paths
+## Phase 7: Post-Launch
 
-## Definition of Done
-- [ ] Extension approved and published
-- [ ] Store listing assets and copy live and accurate
-- [ ] Privacy/data usage declarations accepted
-- [ ] First post-launch smoke test completed successfully
+- [ ] Install the published version from the store.
+- [ ] Open the panel, write a note, export it, and verify no regressions.
+- [ ] Monitor review feedback and user reports.
+- [ ] Prepare a patch release if a review or launch issue appears.
+
+## Risks And Mitigations
+
+- Risk: Broad host permissions raise reviewer questions.
+  - Mitigation: Explain that access is used only for selected-text insertion on
+    ordinary web pages while Jot it! is open.
+- Risk: Privacy copy diverges from implementation.
+  - Mitigation: Recheck `PRIVACY.md` and Chrome Web Store disclosures before
+    each submission.
+- Risk: Store screenshots drift from the current UI.
+  - Mitigation: Capture screenshots from the packaged extension during release
+    QA.
+
+## Definition Of Done
+
+- [ ] Extension is approved and published.
+- [ ] Store listing copy, screenshots, privacy disclosures, and permission
+  explanations are accurate.
+- [ ] First post-launch smoke test passes.
