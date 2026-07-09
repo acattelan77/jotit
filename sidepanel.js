@@ -33,6 +33,7 @@ const chooseExportFolderButton = document.getElementById("chooseExportFolder");
 const saveExportFolderButton = document.getElementById("saveExportFolder");
 const clearExportFolderButton = document.getElementById("clearExportFolder");
 const exportFolderStatus = document.getElementById("exportFolderStatus");
+const exportFolderIndicator = document.getElementById("exportFolderIndicator");
 
 const NoteUtils = window.NoteUtils;
 if (!NoteUtils) {
@@ -313,6 +314,17 @@ const storeExportHandle = (handle) =>
 const clearStoredExportHandle = () =>
   withSettingsStore("readwrite", (store) => store.delete(EXPORT_DIR_HANDLE_KEY));
 
+const updateExportFolderIndicator = () => {
+  if (!exportFolderIndicator) return;
+  if (exportDirectoryHandle && exportDirectoryName) {
+    exportFolderIndicator.textContent = `Save to: ${exportDirectoryName}`;
+    exportFolderIndicator.hidden = false;
+  } else {
+    exportFolderIndicator.textContent = "";
+    exportFolderIndicator.hidden = true;
+  }
+};
+
 const updateExportFolderStatus = () => {
   if (!exportFolderStatus) return;
   if (!supportsFolderSelection()) {
@@ -346,13 +358,14 @@ const updateExportFolderStatus = () => {
     if (clearExportFolderButton) {
       clearExportFolderButton.disabled = !settingsOpen;
     }
-    return;
+  } else {
+    exportFolderStatus.textContent =
+      "No folder selected. Files are saved to your Downloads folder.";
+    if (clearExportFolderButton) {
+      clearExportFolderButton.disabled = !settingsOpen;
+    }
   }
-  exportFolderStatus.textContent =
-    "No folder selected. Files are saved to your Downloads folder.";
-  if (clearExportFolderButton) {
-    clearExportFolderButton.disabled = !settingsOpen;
-  }
+  updateExportFolderIndicator();
 };
 
 const loadExportFolderSettings = async () => {
