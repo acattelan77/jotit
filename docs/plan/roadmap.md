@@ -27,59 +27,35 @@ do; this isn't a mandate)
   service-worker-eviction gap described in
   [ADR-0002](../decisions/0002-storage-local-shared-state.md). Write a new
   ADR if you do this.
+- **Note library — storage + browsable list + bulk export (scoped, ready to
+  implement).** Originally two open-ended proposals ("durable storage" and
+  "browser with frontmatter search/linking"); scoped down on 2026-07-09 at
+  the product owner's direction to explicitly **drop linking** and keep this
+  to storage plus a flat, searchable, reverse-chronological list — closer to
+  Evernote, not Obsidian's graph. A bulk **"export all notes"** command was
+  added to the scope the same day — explicitly a follow-on that depends on
+  the storage piece existing first, reusing the existing per-note export
+  mechanics in a loop rather than a new export format. Fully scoped in
+  [ADR-0006](../decisions/0006-note-library-via-indexeddb.md) (Proposed —
+  IndexedDB, scoped to the panel document, entries created only on explicit
+  Save/Save As, verified storage capacity is disk-space-bound not a small
+  fixed cap) and [note-library.md](../specs/note-library.md) (behavior spec,
+  written ahead of implementation, includes the bulk-export command). A few
+  open questions are left for implementation time (see that spec's "Open
+  questions" section) — this is ready to pick up, not blocked on further
+  scoping. Implementation order within this item: storage/list first, bulk
+  export second (it has nothing to export until the library exists).
 
 ## Proposed features (requested, not yet scoped or started)
 
 These came directly from the product owner as "next steps" — bigger than the
 tech-debt backlog below, and each likely needs its own investigation/spec
-before implementation starts. Listed in the order given, not necessarily
-priority order. **Each of these touches a documented ADR** — read the linked
-ADR before starting, and expect to write a new ADR (superseding or extending
-it) rather than just coding around it, per the ground rules in
-[`AGENTS.md`](../../AGENTS.md).
+before implementation starts. **Each of these touches a documented ADR** —
+read the linked ADR before starting, and expect to write a new ADR
+(superseding or extending it) rather than just coding around it, per the
+ground rules in [`AGENTS.md`](../../AGENTS.md).
 
-1. **Durable local storage for notes.** Today, `chrome.storage.local` only
-   ever holds the single in-progress *draft* (see
-   [draft-persistence.md](../specs/draft-persistence.md)) — finished notes
-   exist only as `.md` files written to disk via the Downloads API or File
-   System Access API (see [export-and-save.md](../specs/export-and-save.md)).
-   There is currently no persistent, browsable store of past notes *inside*
-   the extension at all. This item needs investigation before implementation:
-   - `chrome.storage.local` has a default quota (historically ~10MB) unless
-     the extension requests the `unlimitedStorage` permission — that's a new
-     permission and needs the same justification treatment as any
-     manifest permission change (see the permission table in
-     [ADR-0001](../decisions/0001-static-unbundled-extension.md)).
-   - IndexedDB is the more typical choice for extensions storing a growing
-     library of documents rather than a handful of small keys — worth
-     evaluating instead of scaling up `chrome.storage.local` usage.
-   - Clarify the actual risk being defended against: normal browser "clear
-     cache" (cached images/files) does **not** touch extension storage;
-     what *does* wipe it is the user clearing "cookies and other site
-     data" with a broad scope, or uninstalling the extension. Confirm this
-     precisely (Chrome's storage docs / testing) before designing a
-     mitigation — the fix might be "make this durable" and/or "make export
-     to disk the real backup, storage is just a cache," which are different
-     designs.
-   - This is a genuine extension of [ADR-0002](../decisions/0002-storage-local-shared-state.md)
-     (which currently only covers draft/preference/session state, not a
-     multi-note library) — write a new ADR once the storage mechanism is
-     chosen.
-2. **In-app note browser, with frontmatter-based search/linking (Obsidian-like).**
-   Depends on (1) — you can't browse a library that isn't stored anywhere.
-   Once notes are persisted, this needs: a list/search UI over stored notes,
-   using the YAML frontmatter (`title`, `date`, `pages_visited` — see
-   [`../architecture.md`](../architecture.md#exported-markdown)) as the
-   index/filter fields, and some notion of note-to-note linking. Open
-   questions to resolve before writing a spec: does linking mean wiki-style
-   `[[note title]]` links stored in the note body (which would need new
-   Markdown↔HTML conversion support, touching
-   [ADR-0003](../decisions/0003-hand-rolled-markdown-conversion.md)), or
-   just frontmatter cross-references? Does this browse the in-extension
-   store from (1), the on-disk exported files, or both (and if both, how do
-   they stay in sync)? This is product-shape work, not just implementation —
-   worth a short design pass before coding.
-3. **Slack-style code blocks + syntax highlighting, Obsidian-style
+1. **Slack-style code blocks + syntax highlighting, Obsidian-style
    highlighting (`==text==`).** Extends
    [rich-text-editor.md](../specs/rich-text-editor.md), which currently only
    supports *inline* code, not fenced code blocks. Three sub-parts with

@@ -41,6 +41,13 @@ each doc/spec coin its own term for it.
   the Markdown.
 - **Frontmatter** — the YAML block at the top of an exported note
   (`title`, `date`, `time`, `datetime`, `pages_visited`).
+- **Note library** *(proposed, not yet implemented — see
+  [ADR-0006](decisions/0006-note-library-via-indexeddb.md))* — an IndexedDB
+  store of previously exported notes, scoped to the panel document, enabling
+  browse/search of past notes from inside the extension. Distinct from the
+  **draft** (single in-progress note) and from the exported `.md` file on
+  disk (which remains the durable source of truth). Deliberately excludes
+  note-to-note linking — see [note-library.md](specs/note-library.md).
 - **NoteUtils** — the shared pure-function library (`lib/note-utils.js`)
   used by `sidepanel.js` for filename building and Markdown↔HTML conversion.
   Anything that doesn't touch `chrome.*` APIs or the DOM and could plausibly

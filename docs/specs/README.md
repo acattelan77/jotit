@@ -22,3 +22,4 @@ drift this doc structure exists to prevent (see
 | [context-title-suggestion.md](context-title-suggestion.md) | Auto-title, title lock, per-host suggestions |
 | [date-time-picker.md](date-time-picker.md) | Meeting date/time controls |
 | [export-and-save.md](export-and-save.md) | Save, Save As, Markdown/YAML output, attachments |
+| [note-library.md](note-library.md) | *(not yet implemented — spec written ahead of code)* Browsing/searching past saved notes |

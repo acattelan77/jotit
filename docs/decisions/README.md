@@ -35,3 +35,4 @@ one of those don't need an ADR — put that context in the relevant
 | [0003](0003-hand-rolled-markdown-conversion.md) | Hand-rolled Markdown↔HTML conversion and YAML frontmatter serialization | Accepted |
 | [0004](0004-local-first-no-telemetry.md) | Local-first, no telemetry, no external servers | Accepted |
 | [0005](0005-single-file-sidepanel-controller.md) | Single-file `sidepanel.js` controller instead of split modules | Accepted |
+| [0006](0006-note-library-via-indexeddb.md) | Local note library, stored in IndexedDB, scoped to the panel document | Proposed |
