@@ -1,7 +1,7 @@
 {
   "name": "jot-it-extension",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "scripts": {
     "assets:generate": "node scripts/generate_store_assets.mjs"
   }
