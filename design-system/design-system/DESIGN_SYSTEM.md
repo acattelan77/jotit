@@ -1,35 +1,62 @@
-# Jot it! — Design System v2
+# Jot it! — Design System v3 ("Chrome native" / Material 3)
 
 Reference for anyone (human or AI agent) changing `sidepanel.html` / `sidepanel.css`.
-Goal: warm, friendly, and quietly premium — a calmer alternative to the original gray panel — while staying native to Chrome's side panel chrome.
+Goal: stop looking like a separate app bolted onto Chrome's side panel, and start
+looking like it belongs there — built on Material 3, the same design language as
+Chrome's own UI (bookmarks, reading list, history side panels).
+
+v2 ("warm, Apple-ish") is preserved for reference in
+`Jot it - New Design System v2 (warm).dc.html`. v3 supersedes it as the target.
 
 ## How to apply this
 
-1. Replace the `:root` block (and its `prefers-color-scheme: dark` block) at the top of `sidepanel.css` with the contents of **`tokens.css`** in this folder. Every variable name is unchanged, so no other selector in `sidepanel.css` needs editing — only the values at the top.
-2. Add the Inter font (see "Typography" below).
-3. Apply the shape/state rules below where noted — these are small, targeted rule changes, not a rewrite.
+1. Replace the `:root` block (and its `prefers-color-scheme: dark` block) at the
+   top of `sidepanel.css` with the contents of **`tokens.css`** in this folder.
+   Variable names are unchanged, so no other selector needs editing — only values.
+2. Swap the font to Roboto (see "Typography" below) — replacing Inter.
+3. Make icon buttons circular (`border-radius: 50%`) instead of squircle —
+   see "Shape" below. This is the main structural change from v2.
+4. Remove the gradient on the primary button and app icon — Material 3 uses flat
+   tonal fills, not gloss/gradient. Solid `--primary-bg` / accent color instead.
 
-Do not invent new colors outside this palette. If a new UI element is needed, compose it from these tokens.
+Do not invent new colors outside this palette. If a new UI element is needed,
+compose it from these tokens.
 
 ## Principles
 
-- **One accent color.** Blue (`--accent`) is the only saturated color in the UI. Everything else is neutral. This is what makes the accent feel deliberate instead of decorative — don't add a second brand color.
-- **Warmth lives in ink and shape, not background.** Surfaces (`--bg`, `--panel`, `--surface`) are near-neutral so the panel sits flush with Chrome/macOS chrome. Warmth comes from a slightly warm dark ink (`#292825`, not pure black) and generous rounding.
-- **Generous, friendly rounding.** Corners scale with element size: small controls 10px, inputs/toolbar 14px, panels/popovers 18–20px. Never mix a sharp corner into this system.
-- **Interactive = tinted blue, not gray.** Hover/active states on icon buttons and toolbar buttons shift toward `--accent-soft` / `--accent`, not a darker gray. Focus rings are blue, not gray (`--border-focus: var(--accent)`).
+- **Borrow Chrome's own materials.** Surface colors, border grays, and the
+  primary blue are Material 3 baseline values — the same family Chrome's native
+  side panels use — so the extension's chrome sits flush with the browser's.
+- **One accent color, used tonally.** Blue (`--accent`) is the only saturated
+  color. Hover/active states use *tonal* variants of it (`--accent-soft` at
+  different strengths), not a separate gray hover state — this is the Material
+  "state layer" pattern.
+- **Flat, not glossy.** No gradients, no glassy highlights. Elevation comes from
+  shadow (`--shadow`), not surface treatments. This is a deliberate departure
+  from the v2 warm/Apple direction.
+- **Icon buttons are circular.** Toolbar and header icon buttons are perfect
+  circles at rest and on hover — the exact shape Chrome uses for its own
+  toolbar icons. Everything else uses the rounded-rectangle shape scale below.
+- **Neutral grays are cool, not warm.** Ink, borders, and muted text sit on
+  Google's standard gray scale (`#1f1f1f`, `#5f6368`, `#dadce0`) rather than the
+  warm off-black of v2.
 
 ## Typography
 
-Inter, loaded from Google Fonts (or self-hosted — see note below):
+Roboto, loaded from Google Fonts (or self-hosted — see note below):
 
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 ```
 
-> The extension's CSP (`style-src 'self'`) blocks the Google Fonts stylesheet as-is. For the built extension, download the Inter woff2 files and self-host under `fonts/`, referencing them via `@font-face` in `sidepanel.css`. `--font-sans` already lists Inter first with the existing system-font stack as fallback, so nothing breaks if the font file is missing.
+> The extension's CSP (`style-src 'self'`) blocks the Google Fonts stylesheet
+> as-is. For the built extension, download the Roboto woff2 files and
+> self-host under `fonts/`, referencing them via `@font-face` in
+> `sidepanel.css`. `--font-sans` already lists Roboto first with the existing
+> system-font stack as fallback.
 
-Scale (unchanged sizes from today, just the new family):
+Scale (unchanged from v2 — only the family changes):
 - H1 / panel title: 19–22px / 700
 - Section heading (e.g. "Decisions" in notes): 1.15–1.4em / 600–700
 - Body / editor text: 15px / 400, line-height 1.7
@@ -42,68 +69,95 @@ See `tokens.css` for exact values. Summary:
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--bg` / `--panel` | `#f7f6f4` | `#1c1c1b` | Page background |
-| `--surface` | `#ffffff` | `#242322` | Inputs, editor, cards |
-| `--surface-muted` | `#f1efec` | `#201f1e` | Toolbar background |
-| `--ink` | `#292825` | `#eeece9` | Primary text |
-| `--muted` / `--muted-soft` | `#64625c` / `#8b8880` | `#b3b0aa` / `#918e87` | Secondary / caption text |
-| `--accent` / `--accent-strong` | `#3b5fd9` / `#2444ad` | `#6d8ffb` / `#8ea4fc` | Buttons, links, active/focus states |
-| `--accent-soft` | `#e7ecfb` | `#2a3050` | Hover/active tint, code background |
-| `--border` | `#e2e0dc` | `#34332f` | Default control border |
+| `--bg` / `--panel` | `#f8fafd` | `#1f1f20` | Page background |
+| `--surface` | `#ffffff` | `#282a2d` | Inputs, editor, cards |
+| `--surface-muted` | `#eaf1fb` | `#2d2e31` | Toolbar background |
+| `--ink` | `#1f1f1f` | `#e8eaed` | Primary text |
+| `--muted` / `--muted-soft` | `#444746` / `#5f6368` | `#c4c7c5` / `#9aa0a6` | Secondary / caption text |
+| `--accent` / `--accent-strong` | `#0b57d0` / `#0842a0` | `#a8c7fa` / `#d3e3fd` | Buttons, links, active/focus states |
+| `--accent-soft` | `#d3e3fd` | `#22385c` | Hover/active tint, code background |
+| `--border` | `#dadce0` | `#3c4043` | Default control border |
 
 ## Shape
 
-- `--radius-sm` (10px): small icon buttons, calendar day cells, chips
-- `--radius-md` (14px): toolbar, inputs, date/time steppers
-- `--radius-lg` (20px): popovers, cards, panel-level containers
-- `--radius` (18px): general default (buttons, editor container)
+- **Icon buttons — circular** (`border-radius: 50%`), 30–34px diameter. This
+  replaces the rounded-square icon buttons from v2 and is the single biggest
+  visual signal of "Chrome native."
+- `--radius-sm` (10px): calendar day cells, chips, small tags
+- `--radius-md` (16px): toolbar, inputs, date/time steppers
+- `--radius-lg` (24px): popovers, cards, panel-level containers
+- `--radius` (16px): general default (editor container)
 
 ## Components & states
 
-Reference mockups: `Jot it - New Design System.dc.html` (open in browser) shows all of the below live, in both light and dark.
+Reference mockup: `Jot it - New Design System.dc.html` (open in browser) shows
+all of the below live, in both light and dark.
 
 **Icon button** (header actions, toolbar, date-picker controls)
-- Rest: `--surface-ghost` bg, `--icon` color, `--border` outline
-- Hover: bg → `--accent-soft`, color → `--accent-strong`, border → transparent or light accent
-- Active/pressed: bg → one step darker tint (`--surface-ghost-active`)
-- Always paired with a dark tooltip (`--tooltip-bg`/`--tooltip-ink`, pill-ish 7px radius) on hover, matching the existing `data-label` attribute pattern — keep that pattern, just restyle the tooltip bubble with the new tokens.
+- Shape: perfect circle, not rounded-square.
+- Rest: transparent bg, `--icon` color, no border (Material buttons are
+  typically borderless; rely on the icon + state layer, not an outline).
+- Hover: bg → `--surface-ghost-hover` (tonal blue state layer), color → `--accent-strong`.
+- Active/pressed: bg → `--surface-ghost-active` (one step darker tint).
+- Always paired with a dark tooltip (`--tooltip-bg`/`--tooltip-ink`, small 4px
+  radius rectangle — Material "plain tooltip" shape, not a pill) on hover,
+  matching the existing `data-label` attribute pattern.
 
 **Text input / date field / editor container**
-- Rest: `--surface` bg, 1px `--border`
-- Focus: border → `--accent` (`--border-focus`), plus a soft 3px accent-tinted glow (`box-shadow: 0 0 0 3px var(--accent-soft)`) instead of the old inset-only ring — more visible, still calm.
+- Rest: `--surface` bg, 1px `--border`, `--radius-md` (16px) corners.
+- Focus: border → `--accent` (`--border-focus`), plus a 3px accent-tinted glow
+  (`box-shadow: 0 0 0 3px var(--accent-soft)`).
 
 **Primary button** (if/when one is needed)
-- `--primary-bg` gradient (accent → accent-strong), white ink, `--primary-shadow`.
+- Flat `--primary-bg` fill (solid, no gradient), white ink, `--primary-shadow`
+  (a crisp Material elevation-1 shadow, not a soft diffuse one), pill radius
+  (`border-radius: 20px` / fully rounded) — Material 3's default filled-button
+  shape.
 
 **Toast** (`#statusMessage`)
-- Neutral confirmations ("Saved locally", "Exported to Downloads"): dark ink pill (`--tooltip-bg` bg, `--tooltip-ink` text), pill radius.
-- Errors: same shape, warm red bg (`#b3413a` light / adjust `~15%` lighter for dark) with light ink — the one intentional exception to the single-accent rule, reserved strictly for failure states.
+- Neutral confirmations ("Saved locally", "Exported to Downloads"): Material
+  "snackbar" shape — dark ink surface (`--tooltip-bg`/`--tooltip-ink`), small
+  8px corner radius rectangle (not a pill), left-aligned padding.
+- Errors: same shape, warm red bg (`#b3413a` light / `#d45a52` dark) with light
+  ink — the one intentional exception to the single-accent rule, reserved
+  strictly for failure states.
 
 **Title lock toggle**
-- Unlocked: ghost icon button, open-padlock icon.
-- Locked: bg → `--surface-muted`, border → `--border`, closed-padlock icon, `--icon-strong` color — a subtle "engaged" look, not a color change.
+- Unlocked: ghost circular icon button, open-padlock icon.
+- Locked: bg → `--surface-muted`, closed-padlock icon, `--icon-strong` color —
+  a subtle "engaged" look, not a color change.
 
 **Context suggestion link** ("Use last: …")
-- Plain text button, `--muted` color, no border/background, `--ink` on hover. Never gets a background — it's a low-emphasis affordance.
+- Plain text button, `--muted` color, no border/background, `--ink` on hover.
+  Never gets a background — it's a low-emphasis affordance.
 
 **Date & time popover**
-- Container: `--surface` bg, `--border`, `--radius-lg`, `--shadow`.
-- Selected day: `--accent-soft` bg, `--accent` border, `--accent-strong` text, `--radius-sm`.
-- "Done" button uses the primary gradient; "Today" stays ghost.
+- Container: `--surface` bg, `--border`, `--radius-lg` (24px), `--shadow`.
+- Selected day: `--accent-soft` bg, `--accent` border, `--accent-strong` text,
+  `--radius-sm`, circular day cells (matches Chrome/Android's own date pickers).
+- "Done" button uses the flat primary fill; "Today" stays ghost/text button.
 
-**Empty editor state** (new — not in the original build, optional to adopt)
-- Centered icon in an `--accent-soft` rounded square (20px radius), `--ink` headline, `--muted-soft` subtext. Use when the editor and title are both empty.
+**Empty editor state**
+- Centered icon in an `--accent-soft` circular badge (not rounded-square —
+  circles read as more "Google"), `--ink` headline, `--muted-soft` subtext.
+  Use when the editor and title are both empty.
 
 ## App icon
 
-Same "j!" gradient mark, refined:
-- 26% corner radius (superellipse-like, matches Apple app icon geometry) instead of the current more generic rounded-square.
-- Gradient: `linear-gradient(160deg, #4c72e8 0%, #2444ad 100%)`.
-- Add a subtle top gloss: a 50%-height white-to-transparent overlay at ~20% opacity, to match the depth of the mockup — keep it subtle, not glassy/skeuomorphic.
+Same "j!" mark, restated in flat Material color:
+- Solid `--accent` fill (`#0b57d0`), no gradient.
+- Material "squircle" corner radius (~22%), slightly less rounded than v2's app
+  icon so it doesn't read as an iOS icon.
+- No gloss/highlight overlay — flat color only, per the "flat not glossy" principle.
 
 ## What NOT to do
 
-- Don't add a second accent hue "for variety" — everything non-neutral should be a shade of the one accent blue (or the reserved error red).
-- Don't warm up the surface backgrounds — keep them neutral; warmth comes from ink color and shape only.
-- Don't drop the rounded-corner scale below 10px anywhere, or mix in sharp corners.
+- Don't add a second accent hue "for variety" — everything non-neutral should
+  be a shade of the one accent blue (or the reserved error red).
+- Don't add gradients or glossy highlights anywhere — flat fills only.
+- Don't round icon buttons as squares/squircles — they must be circular.
+- Don't warm up the neutral scale — ink, borders, and muted text stay on the
+  cool Google gray scale, not the warm off-black from v2.
+- Don't drop the rounded-corner scale below 10px anywhere on rectangular
+  elements, or mix in fully sharp corners.
 - Don't restyle the tooltip/data-label mechanism — only its colors/radius.

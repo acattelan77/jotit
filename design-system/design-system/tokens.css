@@ -1,107 +1,110 @@
 /*
-  Jot it! — design tokens (v2)
+  Jot it! — design tokens (v3, "Chrome native" / Material 3)
   Drop-in replacement for the :root / dark-mode block at the top of sidepanel.css.
-  Variable names are unchanged from the original file, so nothing else in
-  sidepanel.css needs to be edited — only these values.
+  Variable names are unchanged from v2, so nothing else in sidepanel.css needs
+  editing — only these values, plus the font-face + a few shape tweaks noted
+  in DESIGN_SYSTEM.md.
 */
 
 :root {
   color-scheme: light dark;
 
-  /* Surfaces — neutral, near-white. Warmth lives in ink/accent, not the bg. */
-  --bg: #f7f6f4;
-  --panel: #f7f6f4;
+  /* Surfaces — cool, faintly blue-tinted neutrals (Material 3 baseline),
+     so the panel reads as part of Chrome's own UI, not a separate app. */
+  --bg: #f8fafd;
+  --panel: #f8fafd;
   --surface: #ffffff;
-  --surface-muted: #f1efec;
-  --surface-ghost: #f1efec;
-  --surface-ghost-hover: #e7ecfb;   /* hover tints toward accent, not gray */
-  --surface-ghost-active: #dbe3f8;
+  --surface-muted: #eaf1fb;
+  --surface-ghost: #eaf1fb;
+  --surface-ghost-hover: #d3e3fd;
+  --surface-ghost-active: #c2d7fc;
 
-  /* Text */
-  --ink: #292825;
-  --muted: #64625c;
-  --muted-strong: #45433d;
-  --muted-soft: #8b8880;
-  --icon: #64625c;
-  --icon-strong: #292825;
-  --icon-muted: #b0aca4;
-  --placeholder: rgba(100, 98, 92, 0.62);
+  /* Text — Google's neutral gray scale, not warm */
+  --ink: #1f1f1f;
+  --muted: #444746;
+  --muted-strong: #303030;
+  --muted-soft: #5f6368;
+  --icon: #444746;
+  --icon-strong: #1f1f1f;
+  --icon-muted: #80868b;
+  --placeholder: rgba(68, 71, 70, 0.62);
 
-  /* Accent — refined brand blue (from the "j!" mark), the only saturated color */
-  --accent: #3b5fd9;
-  --accent-strong: #2444ad;
-  --accent-soft: #e7ecfb;
+  /* Accent — Material 3 baseline blue, the only saturated color */
+  --accent: #0b57d0;
+  --accent-strong: #0842a0;
+  --accent-soft: #d3e3fd;
 
   /* Borders & focus */
-  --border: #e2e0dc;
-  --border-soft: #ececea;
-  --border-hover: #d0cdc7;
-  --border-focus: #3b5fd9;
+  --border: #dadce0;
+  --border-soft: #e8eaed;
+  --border-hover: #c4c7c5;
+  --border-focus: #0b57d0;
 
-  --shadow: 0 16px 34px rgba(41, 40, 37, 0.10);
-  --tooltip-bg: #292825;
-  --tooltip-ink: #f7f6f4;
+  --shadow: 0 1px 2px rgba(31, 31, 31, 0.15), 0 4px 12px rgba(31, 31, 31, 0.10);
+  --tooltip-bg: #1f1f1f;
+  --tooltip-ink: #f8fafd;
 
-  --link: #2444ad;
-  --code-bg: #eef1fb;
-  --code-ink: #2444ad;
-  --pre-bg: #f1efec;
+  --link: #0b57d0;
+  --code-bg: #eaf1fb;
+  --code-ink: #0b57d0;
+  --pre-bg: #f1f3f4;
 
-  --primary-bg: linear-gradient(180deg, #3b5fd9 0%, #2444ad 100%);
+  /* Flat fills, no gradients — Material 3 uses solid tonal color, not gloss */
+  --primary-bg: #0b57d0;
   --primary-ink: #ffffff;
-  --primary-border: #2444ad;
-  --primary-shadow: 0 6px 14px rgba(36, 68, 173, 0.28);
+  --primary-border: #0b57d0;
+  --primary-shadow: 0 1px 2px rgba(11, 87, 208, 0.30), 0 3px 8px rgba(11, 87, 208, 0.18);
 
-  /* Shape */
-  --radius: 18px;
+  /* Shape — Material 3 shape scale. Icon buttons are circular (see CSS). */
+  --radius: 16px;
   --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
 
-  --font-sans: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont,
-    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans: "Roboto", "Google Sans Text", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1c1c1b;
-    --panel: #1c1c1b;
-    --surface: #242322;
-    --surface-muted: #201f1e;
-    --surface-ghost: #242322;
-    --surface-ghost-hover: #2a3050;
-    --surface-ghost-active: #323a63;
+    --bg: #1f1f20;
+    --panel: #1f1f20;
+    --surface: #282a2d;
+    --surface-muted: #2d2e31;
+    --surface-ghost: #2d2e31;
+    --surface-ghost-hover: #33415e;
+    --surface-ghost-active: #3d4f75;
 
-    --ink: #eeece9;
-    --muted: #b3b0aa;
-    --muted-strong: #d7d4cf;
-    --muted-soft: #918e87;
-    --icon: #b3b0aa;
-    --icon-strong: #f4f2ef;
-    --icon-muted: #78756e;
-    --placeholder: rgba(179, 176, 170, 0.6);
+    --ink: #e8eaed;
+    --muted: #c4c7c5;
+    --muted-strong: #dadce0;
+    --muted-soft: #9aa0a6;
+    --icon: #9aa0a6;
+    --icon-strong: #e8eaed;
+    --icon-muted: #5f6368;
+    --placeholder: rgba(154, 160, 166, 0.65);
 
-    --accent: #6d8ffb;
-    --accent-strong: #8ea4fc;
-    --accent-soft: #2a3050;
+    --accent: #a8c7fa;
+    --accent-strong: #d3e3fd;
+    --accent-soft: #22385c;
 
-    --border: #34332f;
-    --border-soft: #2b2a27;
-    --border-hover: #454339;
-    --border-focus: #6d8ffb;
+    --border: #3c4043;
+    --border-soft: #333438;
+    --border-hover: #5f6368;
+    --border-focus: #a8c7fa;
 
-    --shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
-    --tooltip-bg: #100f0e;
-    --tooltip-ink: #eeece9;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.55), 0 6px 16px rgba(0, 0, 0, 0.35);
+    --tooltip-bg: #e8eaed;
+    --tooltip-ink: #1f1f1f;
 
-    --link: #8ea4fc;
-    --code-bg: #232a4d;
-    --code-ink: #b7c6fd;
-    --pre-bg: #201f1e;
+    --link: #a8c7fa;
+    --code-bg: #22385c;
+    --code-ink: #a8c7fa;
+    --pre-bg: #2d2e31;
 
-    --primary-bg: linear-gradient(180deg, #2c3454 0%, #232a4d 100%);
-    --primary-ink: #eeece9;
-    --primary-border: #2b2a27;
-    --primary-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+    --primary-bg: #a8c7fa;
+    --primary-ink: #062e6f;
+    --primary-border: #a8c7fa;
+    --primary-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   }
 }

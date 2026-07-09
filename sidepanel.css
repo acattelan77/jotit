@@ -1,110 +1,129 @@
 :root {
   color-scheme: light dark;
 
-  /* Surfaces — neutral, near-white. Warmth lives in ink/accent, not the bg. */
-  --bg: #f7f6f4;
-  --panel: #f7f6f4;
+  /* Surfaces — cool, faintly blue-tinted neutrals (Material 3 baseline). */
+  --bg: #f8fafd;
+  --panel: #f8fafd;
   --surface: #ffffff;
-  --surface-muted: #f1efec;
-  --surface-ghost: #f1efec;
-  --surface-ghost-hover: #e7ecfb;   /* hover tints toward accent, not gray */
-  --surface-ghost-active: #dbe3f8;
+  --surface-muted: #eaf1fb;
+  --surface-ghost: #eaf1fb;
+  --surface-ghost-hover: #d3e3fd;
+  --surface-ghost-active: #c2d7fc;
 
-  /* Text */
-  --ink: #292825;
-  --muted: #64625c;
-  --muted-strong: #45433d;
-  --muted-soft: #8b8880;
-  --icon: #64625c;
-  --icon-strong: #292825;
-  --icon-muted: #b0aca4;
-  --placeholder: rgba(100, 98, 92, 0.62);
+  /* Text — Google's neutral gray scale. */
+  --ink: #1f1f1f;
+  --muted: #444746;
+  --muted-strong: #303030;
+  --muted-soft: #5f6368;
+  --icon: #444746;
+  --icon-strong: #1f1f1f;
+  --icon-muted: #80868b;
+  --placeholder: rgba(68, 71, 70, 0.62);
 
-  /* Accent — refined brand blue (from the "j!" mark), the only saturated color */
-  --accent: #3b5fd9;
-  --accent-strong: #2444ad;
-  --accent-soft: #e7ecfb;
+  /* Accent — Material 3 baseline blue. */
+  --accent: #0b57d0;
+  --accent-strong: #0842a0;
+  --accent-soft: #d3e3fd;
 
   /* Borders & focus */
-  --border: #e2e0dc;
-  --border-soft: #ececea;
-  --border-hover: #d0cdc7;
-  --border-focus: #3b5fd9;
+  --border: #dadce0;
+  --border-soft: #e8eaed;
+  --border-hover: #c4c7c5;
+  --border-focus: #0b57d0;
 
-  --shadow: 0 16px 34px rgba(41, 40, 37, 0.10);
-  --tooltip-bg: #292825;
-  --tooltip-ink: #f7f6f4;
+  --shadow: 0 1px 2px rgba(31, 31, 31, 0.15),
+    0 4px 12px rgba(31, 31, 31, 0.10);
+  --tooltip-bg: #1f1f1f;
+  --tooltip-ink: #f8fafd;
 
-  --link: #2444ad;
-  --code-bg: #eef1fb;
-  --code-ink: #2444ad;
-  --pre-bg: #f1efec;
+  --link: #0b57d0;
+  --code-bg: #eaf1fb;
+  --code-ink: #0b57d0;
+  --pre-bg: #f1f3f4;
 
-  --primary-bg: linear-gradient(180deg, #3b5fd9 0%, #2444ad 100%);
+  --primary-bg: #0b57d0;
   --primary-ink: #ffffff;
-  --primary-border: #2444ad;
-  --primary-shadow: 0 6px 14px rgba(36, 68, 173, 0.28);
+  --primary-border: #0b57d0;
+  --primary-shadow: 0 1px 2px rgba(11, 87, 208, 0.30),
+    0 3px 8px rgba(11, 87, 208, 0.18);
 
-  /* Shape */
-  --radius: 18px;
+  /* Shape — Material 3 shape scale. Icon buttons are circular in CSS. */
+  --radius: 16px;
   --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
 
-  --font-sans: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont,
-    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans: "Roboto", "Google Sans Text", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1c1c1b;
-    --panel: #1c1c1b;
-    --surface: #242322;
-    --surface-muted: #201f1e;
-    --surface-ghost: #242322;
-    --surface-ghost-hover: #2a3050;
-    --surface-ghost-active: #323a63;
+    --bg: #1f1f20;
+    --panel: #1f1f20;
+    --surface: #282a2d;
+    --surface-muted: #2d2e31;
+    --surface-ghost: #2d2e31;
+    --surface-ghost-hover: #33415e;
+    --surface-ghost-active: #3d4f75;
 
-    --ink: #eeece9;
-    --muted: #b3b0aa;
-    --muted-strong: #d7d4cf;
-    --muted-soft: #918e87;
-    --icon: #b3b0aa;
-    --icon-strong: #f4f2ef;
-    --icon-muted: #78756e;
-    --placeholder: rgba(179, 176, 170, 0.6);
+    --ink: #e8eaed;
+    --muted: #c4c7c5;
+    --muted-strong: #dadce0;
+    --muted-soft: #9aa0a6;
+    --icon: #9aa0a6;
+    --icon-strong: #e8eaed;
+    --icon-muted: #5f6368;
+    --placeholder: rgba(154, 160, 166, 0.65);
 
-    --accent: #6d8ffb;
-    --accent-strong: #8ea4fc;
-    --accent-soft: #2a3050;
+    --accent: #a8c7fa;
+    --accent-strong: #d3e3fd;
+    --accent-soft: #22385c;
 
-    --border: #34332f;
-    --border-soft: #2b2a27;
-    --border-hover: #454339;
-    --border-focus: #6d8ffb;
+    --border: #3c4043;
+    --border-soft: #333438;
+    --border-hover: #5f6368;
+    --border-focus: #a8c7fa;
 
-    --shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
-    --tooltip-bg: #100f0e;
-    --tooltip-ink: #eeece9;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.55),
+      0 6px 16px rgba(0, 0, 0, 0.35);
+    --tooltip-bg: #e8eaed;
+    --tooltip-ink: #1f1f1f;
 
-    --link: #8ea4fc;
-    --code-bg: #232a4d;
-    --code-ink: #b7c6fd;
-    --pre-bg: #201f1e;
+    --link: #a8c7fa;
+    --code-bg: #22385c;
+    --code-ink: #a8c7fa;
+    --pre-bg: #2d2e31;
 
-    --primary-bg: linear-gradient(180deg, #2c3454 0%, #232a4d 100%);
-    --primary-ink: #eeece9;
-    --primary-border: #2b2a27;
-    --primary-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+    --primary-bg: #a8c7fa;
+    --primary-ink: #062e6f;
+    --primary-border: #a8c7fa;
+    --primary-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   }
 }
 
 @font-face {
-  font-family: "Inter";
+  font-family: "Roboto";
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 400;
   font-display: swap;
-  src: url("fonts/Inter.woff2") format("woff2");
+  src: url("fonts/Roboto-400.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/Roboto-500.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/Roboto-700.ttf") format("truetype");
 }
 
 * {
@@ -152,12 +171,13 @@ body {
 
 .toast {
   position: fixed;
-  right: 16px;
+  left: 16px;
+  right: auto;
   bottom: 44px;
   background: var(--tooltip-bg);
   color: var(--tooltip-ink);
-  border-radius: 999px;
-  padding: 8px 14px;
+  border-radius: 8px;
+  padding: 9px 16px;
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.2px;
@@ -284,7 +304,7 @@ h1 {
   text-transform: none;
   letter-spacing: normal;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 11px 14px;
   background: var(--surface);
   color: var(--ink);
@@ -294,17 +314,7 @@ h1 {
 }
 
 .field select {
-  appearance: none;
-  background-image: linear-gradient(
-      45deg,
-      transparent 50%,
-      var(--muted-strong) 50%
-    ),
-    linear-gradient(135deg, var(--muted-strong) 50%, transparent 50%);
-  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  padding-right: 28px;
+  appearance: auto;
 }
 
 .field__label--small {
@@ -351,7 +361,7 @@ h1 {
   background: var(--surface-muted);
   border: 1px solid var(--border);
   border-bottom: none;
-  border-radius: 14px 14px 0 0;
+  border-radius: var(--radius) var(--radius) 0 0;
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.03);
   justify-content: flex-start;
 }
@@ -364,8 +374,8 @@ h1 {
   padding: 0;
   font-size: 12px;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border: none;
+  border-radius: 50%;
   color: var(--icon);
   display: flex;
   align-items: center;
@@ -401,7 +411,7 @@ h1 {
   gap: 0;
   flex: 1;
   min-height: 0;
-  border-radius: 14px;
+  border-radius: var(--radius);
   position: relative;
   transition: box-shadow 160ms ease;
 }
@@ -426,7 +436,7 @@ h1 {
   font-weight: 400;
   border: 1px solid var(--border);
   border-top: none;
-  border-radius: 0 0 14px 14px;
+  border-radius: 0 0 var(--radius) var(--radius);
   padding: 10px 12px var(--editor-bottom-padding);
   background: var(--surface);
   color: var(--ink);
@@ -592,7 +602,7 @@ h1 {
   align-items: center;
   gap: 6px;
   padding: 0;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
 }
@@ -661,7 +671,7 @@ h1 {
   position: relative;
   padding: 11px 14px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.03);
 }
@@ -702,11 +712,11 @@ h1 {
 .field-inline .inline-action,
 .field-inline .inline-icon {
   padding: 0;
-  height: 26px;
-  width: 26px;
-  min-width: 26px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
+  height: 28px;
+  width: 28px;
+  min-width: 28px;
+  border-radius: 50%;
+  border: none;
   background: transparent;
   color: var(--icon);
 }
@@ -898,7 +908,7 @@ h1 {
   min-width: 26px;
   min-height: 26px;
   padding: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
 }
 
 .date-picker__sep {
@@ -943,7 +953,7 @@ h1 {
 button {
   border: none;
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;
@@ -962,7 +972,7 @@ button:focus-visible {
   min-height: 30px;
   line-height: 1;
   font-size: 16px;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -1042,18 +1052,26 @@ body.compact .toolbar button {
   background: var(--primary-bg);
   color: var(--primary-ink);
   border: 1px solid var(--primary-border);
+  border-radius: 20px;
   box-shadow: var(--primary-shadow);
 }
 
 .primary:hover {
-  transform: translateY(-1px);
+  background: var(--accent-strong);
 }
 
 .ghost {
-  background: var(--surface-ghost);
-  color: var(--icon);
+  background: transparent;
+  color: var(--ink);
   border: 1px solid var(--border);
   box-shadow: none;
+}
+
+.icon-button.ghost,
+.field-inline .ghost {
+  background: transparent;
+  color: var(--icon);
+  border: none;
 }
 
 .ghost:hover {
@@ -1110,7 +1128,7 @@ body:not(.standalone) #attachWindow {
   content: attr(data-label);
   position: absolute;
   padding: 4px 6px;
-  border-radius: 7px;
+  border-radius: 4px;
   background: var(--tooltip-bg);
   color: var(--tooltip-ink);
   font-size: 11px;
