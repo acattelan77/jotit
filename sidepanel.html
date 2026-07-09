@@ -30,14 +30,12 @@
             </svg>
           </button>
           <button
-            id="settingsToggle"
+            id="saveAsBtn"
             class="ghost icon-button"
             type="button"
-            aria-label="Toggle settings"
-            title="Toggle settings"
-            data-label="Settings"
-            aria-expanded="false"
-            aria-controls="settingsSection"
+            aria-label="Save as..."
+            title="Save as..."
+            data-label="Save as"
           >
             <svg
               class="icon"
@@ -45,10 +43,9 @@
               aria-hidden="true"
               focusable="false"
             >
-              <circle cx="12" cy="12" r="3" />
-              <path
-                d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 0 1 0 2.8 2 2 0 0 1-2.8 0l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.2a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 0 1-2.8 0 2 2 0 0 1 0-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 0-2.8 2 2 0 0 1 2.8 0l.1.1a1.6 1.6 0 0 0 1.8.3h0a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 1 1.5h0a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 0 2 2 0 0 1 0 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v0a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.5 1z"
-              />
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
             </svg>
           </button>
           <button
@@ -111,34 +108,8 @@
         </div>
       </header>
 
-      <section id="settingsSection" class="settings" aria-label="Settings" hidden>
-        <div class="field">
-          <span class="field__label field__label--small">Settings</span>
-          <div class="settings-card">
-            <span class="settings-card__title">Export folder</span>
-            <div class="settings-card__row">
-              <p id="exportFolderStatus" class="settings-card__text">
-                No folder selected. Files are saved to your Downloads folder.
-              </p>
-              <div class="settings-card__actions">
-                <button id="chooseExportFolder" class="ghost" type="button">
-                  Choose folder
-                </button>
-                <button id="saveExportFolder" class="ghost" type="button">
-                  Save & close
-                </button>
-                <button id="clearExportFolder" class="ghost" type="button">
-                  Reset & close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section class="meta">
         <label class="field field--context">
-          <span class="field__label">What's this about?</span>
           <div class="field-inline field-inline--text">
             <input
               id="meetingName"
@@ -356,8 +327,8 @@
       </section>
 
       <footer class="actions">
-        <div id="exportFolderIndicator" class="folder-indicator" hidden></div>
         <div id="statusMessage" class="toast" role="status" aria-live="polite"></div>
+        <span id="versionNumber" class="version-number">v. 1.2.1</span>
       </footer>
     </main>
 

@@ -23,17 +23,11 @@ const openWindowButton = document.getElementById("openWindow");
 const attachWindowButton = document.getElementById("attachWindow");
 const saveButton = document.getElementById("saveBtn");
 const clearButton = document.getElementById("clearBtn");
-const settingsToggleButton = document.getElementById("settingsToggle");
-const settingsSection = document.getElementById("settingsSection");
+const saveAsBtn = document.getElementById("saveAsBtn");
 const toolbar = document.querySelector(".toolbar");
 const editorStack = document.querySelector(".editor-stack");
 const statusMessage = document.getElementById("statusMessage");
 const contextSuggestion = document.getElementById("contextSuggestion");
-const chooseExportFolderButton = document.getElementById("chooseExportFolder");
-const saveExportFolderButton = document.getElementById("saveExportFolder");
-const clearExportFolderButton = document.getElementById("clearExportFolder");
-const exportFolderStatus = document.getElementById("exportFolderStatus");
-const exportFolderIndicator = document.getElementById("exportFolderIndicator");
 
 const NoteUtils = window.NoteUtils;
 if (!NoteUtils) {
@@ -55,21 +49,12 @@ const {
 const CONTEXT_KEY = "contextByHost";
 const DEBUG_KEY = "debugLogsEnabled";
 const TITLE_LOCK_KEY = "titleLockEnabled";
-const EXPORT_DIR_NAME_KEY = "exportDirectoryName";
-const EXPORT_DIR_DB_NAME = "jotItSettings";
-const EXPORT_DIR_STORE_NAME = "handles";
-const EXPORT_DIR_HANDLE_KEY = "exportDirectoryHandle";
 const userAgent = navigator.userAgent || "";
 const chromeVersionMatch = userAgent.match(/\bChrome\/(\d+)\./i);
 const chromeMajorVersion = chromeVersionMatch
   ? Number.parseInt(chromeVersionMatch[1], 10)
   : null;
 const isMacOs = /\bMacintosh\b|\bMac OS X\b/i.test(userAgent);
-// TODO: Remove this version-specific workaround once Chrome 145 is obsolete.
-// Feature detection for the macOS folder-picker crash is not available,
-// so we hardcode the known affected version.
-const isAffectedMacChromeFolderPicker =
-  isMacOs && Number.isInteger(chromeMajorVersion) && chromeMajorVersion === 145;
 
 let statusTimer;
 let toastTimer;
@@ -91,12 +76,6 @@ let pageHistory = [];
 let debugEnabled = false;
 let contextByHost = {};
 let titleLocked = false;
-let settingsOpen = false;
-let exportDirectoryHandle = null;
-let exportDirectoryName = "";
-let settingsDraftDirectoryHandle = null;
-let settingsDraftDirectoryName = "";
-let settingsDbPromise = null;
 const urlParams = new URLSearchParams(window.location.search);
 const isStandalone = urlParams.get("standalone") === "1";
 const sourceTabIdParam = Number(urlParams.get("sourceTabId"));
@@ -158,44 +137,6 @@ const updateTitleLockButton = () => {
   titleLockButton.setAttribute("aria-label", label);
   titleLockButton.setAttribute("title", label);
   titleLockButton.dataset.label = titleLocked ? "Unlock" : "Lock";
-};
-
-const getDirectoryDisplayName = ({ name, handle } = {}) => {
-  if (handle && typeof handle.name === "string" && handle.name.trim()) {
-    return handle.name.trim();
-  }
-  if (typeof name === "string" && name.trim()) return name.trim();
-  return "";
-};
-
-const syncSettingsDraftFromSaved = () => {
-  settingsDraftDirectoryHandle = exportDirectoryHandle;
-  settingsDraftDirectoryName = exportDirectoryHandle
-    ? getDirectoryDisplayName({
-        name: exportDirectoryName,
-        handle: exportDirectoryHandle,
-      })
-    : "";
-};
-
-const setSettingsOpen = (open) => {
-  const nextOpen = Boolean(open);
-  if (settingsOpen === nextOpen) return;
-  settingsOpen = nextOpen;
-  if (settingsOpen) {
-    syncSettingsDraftFromSaved();
-  }
-  if (settingsSection) {
-    settingsSection.hidden = !settingsOpen;
-  }
-  if (settingsToggleButton) {
-    settingsToggleButton.classList.toggle("is-active", settingsOpen);
-    settingsToggleButton.setAttribute(
-      "aria-expanded",
-      settingsOpen ? "true" : "false"
-    );
-  }
-  updateExportFolderStatus();
 };
 
 const setStatus = (message, timeoutMs = 0) => {
@@ -261,269 +202,6 @@ const storageRemove = (key) =>
     });
   });
 
-const supportsFolderSelection = () =>
-  typeof window.showDirectoryPicker === "function" &&
-  typeof indexedDB !== "undefined" &&
-  !isAffectedMacChromeFolderPicker;
-
-const getSettingsDb = () => {
-  if (!supportsFolderSelection()) return Promise.resolve(null);
-  if (settingsDbPromise) return settingsDbPromise;
-  settingsDbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(EXPORT_DIR_DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(EXPORT_DIR_STORE_NAME)) {
-        db.createObjectStore(EXPORT_DIR_STORE_NAME);
-      }
-    };
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
-    request.onerror = () => {
-      reject(request.error || new Error("IndexedDB unavailable."));
-    };
-  }).catch((error) => {
-    settingsDbPromise = null;
-    throw error;
-  });
-  return settingsDbPromise;
-};
-
-const withSettingsStore = async (mode, makeRequest) => {
-  const db = await getSettingsDb();
-  if (!db) return null;
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(EXPORT_DIR_STORE_NAME, mode);
-    const store = tx.objectStore(EXPORT_DIR_STORE_NAME);
-    const request = makeRequest(store);
-    request.onsuccess = () => resolve(request.result ?? null);
-    request.onerror = () => reject(request.error || tx.error);
-    tx.onabort = () => reject(tx.error || request.error);
-  });
-};
-
-const loadStoredExportHandle = () =>
-  withSettingsStore("readonly", (store) => store.get(EXPORT_DIR_HANDLE_KEY));
-
-const storeExportHandle = (handle) =>
-  withSettingsStore("readwrite", (store) =>
-    store.put(handle, EXPORT_DIR_HANDLE_KEY)
-  );
-
-const clearStoredExportHandle = () =>
-  withSettingsStore("readwrite", (store) => store.delete(EXPORT_DIR_HANDLE_KEY));
-
-const updateExportFolderIndicator = () => {
-  if (!exportFolderIndicator) return;
-  if (exportDirectoryHandle && exportDirectoryName) {
-    exportFolderIndicator.textContent = `Save to: ${exportDirectoryName}`;
-    exportFolderIndicator.hidden = false;
-  } else {
-    exportFolderIndicator.textContent = "";
-    exportFolderIndicator.hidden = true;
-  }
-};
-
-const updateExportFolderStatus = () => {
-  if (!exportFolderStatus) return;
-  if (!supportsFolderSelection()) {
-    exportFolderStatus.textContent = isAffectedMacChromeFolderPicker
-      ? "Custom folder selection is disabled on Chrome 145 for macOS due to browser crashes. Use Save As when exporting."
-      : "Folder selection is not available here. Files are saved to Downloads.";
-    if (chooseExportFolderButton) chooseExportFolderButton.disabled = true;
-    if (saveExportFolderButton) saveExportFolderButton.disabled = true;
-    if (clearExportFolderButton) clearExportFolderButton.disabled = true;
-    return;
-  }
-  if (chooseExportFolderButton) chooseExportFolderButton.disabled = false;
-  const visibleFolderName = settingsOpen
-    ? settingsDraftDirectoryHandle
-      ? getDirectoryDisplayName({
-          name: settingsDraftDirectoryName,
-          handle: settingsDraftDirectoryHandle,
-        })
-      : ""
-    : exportDirectoryHandle
-      ? getDirectoryDisplayName({
-          name: exportDirectoryName,
-          handle: exportDirectoryHandle,
-        })
-      : "";
-  if (saveExportFolderButton) {
-    saveExportFolderButton.disabled = !settingsOpen;
-  }
-  if (visibleFolderName) {
-    exportFolderStatus.textContent = `Selected folder: ${visibleFolderName}`;
-    if (clearExportFolderButton) {
-      clearExportFolderButton.disabled = !settingsOpen;
-    }
-  } else {
-    exportFolderStatus.textContent =
-      "No folder selected. Files are saved to your Downloads folder.";
-    if (clearExportFolderButton) {
-      clearExportFolderButton.disabled = !settingsOpen;
-    }
-  }
-  updateExportFolderIndicator();
-};
-
-const loadExportFolderSettings = async () => {
-  if (!supportsFolderSelection()) {
-    syncSettingsDraftFromSaved();
-    updateExportFolderStatus();
-    return;
-  }
-  try {
-    const handle = await loadStoredExportHandle();
-    if (handle && handle.kind === "directory") {
-      exportDirectoryHandle = handle;
-      const resolvedName = getDirectoryDisplayName({
-        name: exportDirectoryName,
-        handle,
-      });
-      if (resolvedName !== exportDirectoryName) {
-        exportDirectoryName = resolvedName;
-        storageSet({ [EXPORT_DIR_NAME_KEY]: resolvedName }).catch(() => {});
-      }
-    } else {
-      exportDirectoryHandle = null;
-      if (exportDirectoryName) {
-        exportDirectoryName = "";
-        storageRemove(EXPORT_DIR_NAME_KEY).catch(() => {});
-      }
-    }
-  } catch (error) {
-    console.warn("Couldn't load export folder handle.", error);
-    exportDirectoryHandle = null;
-    if (exportDirectoryName) {
-      exportDirectoryName = "";
-      storageRemove(EXPORT_DIR_NAME_KEY).catch(() => {});
-    }
-  }
-  syncSettingsDraftFromSaved();
-  updateExportFolderStatus();
-};
-
-const chooseExportFolder = async () => {
-  if (!supportsFolderSelection()) {
-    showToast(
-      isAffectedMacChromeFolderPicker
-        ? "Folder picker disabled on this Chrome version. Use Save As instead."
-        : "Folder selection is not available in this context.",
-      {
-        timeoutMs: 2600,
-      }
-    );
-    return;
-  }
-  try {
-    const handle = await window.showDirectoryPicker();
-    if (!handle) return;
-    const resolvedName = getDirectoryDisplayName({
-      name: handle?.name || "",
-      handle,
-    });
-    if (resolvedName.toLowerCase() === "downloads") {
-      settingsDraftDirectoryHandle = null;
-      settingsDraftDirectoryName = "";
-      updateExportFolderStatus();
-      showToast("Downloads is already the default folder.", {
-        timeoutMs: 2600,
-      });
-      return;
-    }
-    settingsDraftDirectoryHandle = handle;
-    settingsDraftDirectoryName = resolvedName;
-    updateExportFolderStatus();
-    showToast(
-      settingsDraftDirectoryName
-        ? `Folder selected: ${settingsDraftDirectoryName}`
-        : "Folder selected. Save & close to apply.",
-      { timeoutMs: 2200 }
-    );
-  } catch (error) {
-    if (error?.name === "AbortError") return;
-    reportError("Couldn't set export folder.", error);
-  }
-};
-
-const saveExportFolderSettings = async () => {
-  if (!settingsOpen) return;
-  exportDirectoryHandle = settingsDraftDirectoryHandle;
-  exportDirectoryName = getDirectoryDisplayName({
-    name: settingsDraftDirectoryName,
-    handle: settingsDraftDirectoryHandle,
-  });
-  if (!supportsFolderSelection()) {
-    updateExportFolderStatus();
-    setSettingsOpen(false);
-    return;
-  }
-  if (!exportDirectoryHandle || !exportDirectoryName) {
-    await clearStoredExportHandle().catch(() => {});
-    await storageRemove(EXPORT_DIR_NAME_KEY).catch(() => {});
-    updateExportFolderStatus();
-    setSettingsOpen(false);
-    showToast("Settings saved.", { timeoutMs: 1600 });
-    return;
-  }
-  try {
-    await storageSet({ [EXPORT_DIR_NAME_KEY]: exportDirectoryName });
-  } catch (error) {
-    console.warn("Couldn't save export directory name.", error);
-  }
-  let storedPersistently = true;
-  try {
-    await storeExportHandle(exportDirectoryHandle);
-  } catch (error) {
-    storedPersistently = false;
-    console.warn("Couldn't persist export folder handle.", error);
-  }
-  updateExportFolderStatus();
-  setSettingsOpen(false);
-  showToast(storedPersistently ? "Settings saved." : "Saved for this session.", {
-    timeoutMs: 1800,
-  });
-};
-
-const clearExportFolder = async () => {
-  settingsDraftDirectoryHandle = null;
-  settingsDraftDirectoryName = "";
-  exportDirectoryHandle = null;
-  exportDirectoryName = "";
-  if (supportsFolderSelection()) {
-    await clearStoredExportHandle().catch(() => {});
-  }
-  await storageRemove(EXPORT_DIR_NAME_KEY).catch(() => {});
-  updateExportFolderStatus();
-  setSettingsOpen(false);
-  showToast("Export folder reset.", { timeoutMs: 1600 });
-};
-
-const writeMarkdownToSelectedFolder = async (markdown, filename) => {
-  if (!exportDirectoryHandle) {
-    throw new Error("No export folder selected.");
-  }
-  let permission = await exportDirectoryHandle.queryPermission({
-    mode: "readwrite",
-  });
-  if (permission !== "granted") {
-    permission = await exportDirectoryHandle.requestPermission({
-      mode: "readwrite",
-    });
-  }
-  if (permission !== "granted") {
-    throw new Error("Folder access not granted.");
-  }
-  const fileHandle = await exportDirectoryHandle.getFileHandle(filename, {
-    create: true,
-  });
-  const writable = await fileHandle.createWritable();
-  await writable.write(markdown);
-  await writable.close();
-};
-
 const debounce = (fn, wait = 250) => {
   let timeoutId;
   return (...args) => {
@@ -545,14 +223,6 @@ if (chrome?.storage?.onChanged) {
       titleLocked = Boolean(changes[TITLE_LOCK_KEY].newValue);
       updateTitleLockButton();
       storageState.refreshed[TITLE_LOCK_KEY] = true;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, EXPORT_DIR_NAME_KEY)) {
-      exportDirectoryName =
-        typeof changes[EXPORT_DIR_NAME_KEY].newValue === "string"
-          ? changes[EXPORT_DIR_NAME_KEY].newValue
-          : "";
-      updateExportFolderStatus();
-      storageState.refreshed[EXPORT_DIR_NAME_KEY] = true;
     }
     if (Object.prototype.hasOwnProperty.call(changes, CONTEXT_KEY)) {
       contextByHost = changes[CONTEXT_KEY].newValue || {};
@@ -1153,46 +823,6 @@ const handleSave = async () => {
   const payload = markdown;
   const mimeType = "text/markdown";
 
-  if (isAffectedMacChromeFolderPicker) {
-    try {
-      await downloadMarkdown(payload, downloadFilename, {
-        saveAs: true,
-        conflictAction: "uniquify",
-        mimeType,
-      });
-      showToast("Choose where to save in the dialog.", { timeoutMs: 1800 });
-      notesInput.focus();
-      return;
-    } catch (error) {
-      reportError("Save failed. Please try again.", error);
-      window.alert("Save failed. Please try again.");
-      return;
-    }
-  }
-
-  if (exportDirectoryHandle) {
-    try {
-      await writeMarkdownToSelectedFolder(payload, filename);
-      showToast(
-        exportDirectoryName
-          ? `Saved to ${exportDirectoryName}`
-          : "Exported",
-        { timeoutMs: 2000 }
-      );
-      notesInput.focus();
-      return;
-    } catch (error) {
-      debugLog("save to selected folder failed", { error: String(error) });
-      if (error?.name === "NotFoundError") {
-        exportDirectoryHandle = null;
-        exportDirectoryName = "";
-        clearStoredExportHandle().catch(() => {});
-        storageRemove(EXPORT_DIR_NAME_KEY).catch(() => {});
-        updateExportFolderStatus();
-      }
-    }
-  }
-
   try {
     await downloadMarkdown(payload, downloadFilename, {
       saveAs: false,
@@ -1214,6 +844,26 @@ const handleSave = async () => {
   }
   showToast("Exported to Downloads", { timeoutMs: 1800 });
   notesInput.focus();
+};
+
+const handleSaveAs = async () => {
+  const data = getFormData();
+  const filename = buildFilename(data);
+  const downloadFilename = toDownloadFilename(filename);
+  const markdown = buildMarkdown(data);
+
+  try {
+    await downloadMarkdown(markdown, downloadFilename, {
+      saveAs: true,
+      conflictAction: "uniquify",
+      mimeType: "text/markdown",
+    });
+    showToast("File saved.", { timeoutMs: 1800 });
+    notesInput.focus();
+  } catch (error) {
+    reportError("Save failed. Please try again.", error);
+    window.alert("Save failed. Please try again.");
+  }
 };
 
 const handleClear = async () => {
@@ -1512,16 +1162,12 @@ const init = async () => {
       STORAGE_KEY,
       CONTEXT_KEY,
       TITLE_LOCK_KEY,
-      EXPORT_DIR_NAME_KEY,
     ]);
     if (result[CONTEXT_KEY] && !storageState.refreshed[CONTEXT_KEY]) {
       contextByHost = result[CONTEXT_KEY] || {};
     }
     if (Object.prototype.hasOwnProperty.call(result, TITLE_LOCK_KEY) && !storageState.refreshed[TITLE_LOCK_KEY]) {
       titleLocked = Boolean(result[TITLE_LOCK_KEY]);
-    }
-    if (typeof result[EXPORT_DIR_NAME_KEY] === "string" && !storageState.refreshed[EXPORT_DIR_NAME_KEY]) {
-      exportDirectoryName = result[EXPORT_DIR_NAME_KEY];
     }
     if (result && result[STORAGE_KEY]) {
       draft = result[STORAGE_KEY];
@@ -1536,9 +1182,6 @@ const init = async () => {
     updateMeetingDateDisplay(meetingDateInput.value);
   }
   updateTitleLockButton();
-  setSettingsOpen(false);
-  updateExportFolderStatus();
-  await loadExportFolderSettings();
   userEditedTitle = Boolean(meetingNameInput.value.trim());
   if (draft && Number.isInteger(draft.cursorOffset)) {
     lastCaretOffset = draft.cursorOffset;
@@ -1688,26 +1331,9 @@ document.addEventListener("click", (event) => {
   closeDatePicker();
 });
 
-document.addEventListener("click", (event) => {
-  if (!settingsOpen || !settingsSection) return;
-  const target = event.target;
-  if (
-    target instanceof Node &&
-    (settingsSection.contains(target) ||
-      settingsToggleButton?.contains(target))
-  ) {
-    return;
-  }
-  setSettingsOpen(false);
-});
-
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && pickerOpen) {
     closeDatePicker();
-    return;
-  }
-  if (event.key === "Escape" && settingsOpen) {
-    setSettingsOpen(false);
   }
 });
 
@@ -1723,19 +1349,8 @@ window.addEventListener("beforeunload", () => {
 });
 
 saveButton.addEventListener("click", handleSave);
+saveAsBtn?.addEventListener("click", handleSaveAs);
 clearButton.addEventListener("click", handleClear);
-settingsToggleButton?.addEventListener("click", () => {
-  setSettingsOpen(!settingsOpen);
-});
-chooseExportFolderButton?.addEventListener("click", () => {
-  chooseExportFolder();
-});
-saveExportFolderButton?.addEventListener("click", () => {
-  saveExportFolderSettings();
-});
-clearExportFolderButton?.addEventListener("click", () => {
-  clearExportFolder();
-});
 openWindowButton?.addEventListener("click", async () => {
   const tab = await getActiveTab();
   const tabId = Number.isInteger(panelTabId) ? panelTabId : tab?.id;
