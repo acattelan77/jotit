@@ -4,15 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Jot it!</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
     <main class="panel">
       <header class="panel__header">
-        <h1>Jot it!</h1>
+        <div class="panel__title">
+          <img class="app-icon" src="icons/icon_48.png" alt="" width="26" height="26" />
+          <h1>Jot it!</h1>
+        </div>
         <div class="panel__actions">
           <button
             id="clearBtn"
@@ -250,7 +250,7 @@
               </div>
                 <div class="date-picker__actions">
                   <button type="button" id="dateToday" class="ghost">Today</button>
-                  <button type="button" id="dateDone" class="ghost">Done</button>
+                  <button type="button" id="dateDone" class="primary">Done</button>
                 </div>
               </div>
             </div>

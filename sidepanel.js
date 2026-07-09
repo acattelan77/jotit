@@ -90,7 +90,10 @@ if (isStandalone) {
   document.body.classList.add("standalone");
 }
 
-const showToast = (message, { timeoutMs = 1800, minIntervalMs = 0 } = {}) => {
+const showToast = (
+  message,
+  { timeoutMs = 1800, minIntervalMs = 0, variant = "default" } = {}
+) => {
   if (!statusMessage) return;
   const now = Date.now();
   if (minIntervalMs && now - lastToastAt < minIntervalMs) return;
@@ -98,11 +101,13 @@ const showToast = (message, { timeoutMs = 1800, minIntervalMs = 0 } = {}) => {
   window.clearTimeout(toastTimer);
   statusMessage.textContent = message || "";
   statusMessage.classList.toggle("is-visible", Boolean(message));
+  statusMessage.classList.toggle("is-error", variant === "error");
   if (timeoutMs > 0) {
     toastTimer = window.setTimeout(() => {
       if (statusMessage.textContent === message) {
         statusMessage.textContent = "";
         statusMessage.classList.remove("is-visible");
+        statusMessage.classList.remove("is-error");
       }
     }, timeoutMs);
   }
@@ -145,7 +150,7 @@ const setStatus = (message, timeoutMs = 0) => {
 
 const reportError = (message, error) => {
   console.warn(message, error);
-  setStatus(message, 5000);
+  showToast(message, { timeoutMs: 5000, variant: "error" });
 };
 
 const storageGet = (key) =>

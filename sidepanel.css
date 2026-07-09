@@ -99,6 +99,14 @@
   }
 }
 
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("fonts/Inter.woff2") format("woff2");
+}
+
 * {
   box-sizing: border-box;
 }
@@ -145,7 +153,7 @@ body {
 .toast {
   position: fixed;
   right: 16px;
-  bottom: 16px;
+  bottom: 44px;
   background: var(--tooltip-bg);
   color: var(--tooltip-ink);
   border-radius: 999px;
@@ -184,17 +192,33 @@ body {
 
 .panel__actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
+.panel__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
 h1 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: 0.15px;
+  flex: 1;
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -322,25 +346,26 @@ h1 {
 /* Formatting toolbar */
 .toolbar {
   display: flex;
-  gap: 4px;
-  padding: 6px 12px 6px 5px;
+  gap: 2px;
+  padding: 6px 10px;
   background: var(--surface-muted);
   border: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-bottom: none;
   border-radius: 14px 14px 0 0;
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.03);
   justify-content: flex-start;
 }
 
 .toolbar button {
-  width: 28px;
-  height: 28px;
-  min-width: 34px;
-  min-height: 34px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   padding: 0;
   font-size: 12px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--icon);
   display: flex;
   align-items: center;
@@ -367,7 +392,7 @@ h1 {
 .toolbar button.active {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--ink);
+  color: var(--accent-strong);
 }
 
 .editor-stack {
@@ -376,6 +401,22 @@ h1 {
   gap: 0;
   flex: 1;
   min-height: 0;
+  border-radius: 14px;
+  position: relative;
+  transition: box-shadow 160ms ease;
+}
+
+.editor-stack.is-focused {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.editor-stack.is-focused::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border-focus);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 /* Contenteditable editor */
@@ -400,19 +441,13 @@ h1 {
   outline: none;
 }
 
-.editor:focus {
-  --editor-bottom-padding: 48px;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
 .editor:hover {
   border-color: var(--border-hover);
 }
 
-.editor-stack.is-focused .toolbar {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+.editor-stack.is-focused .editor,
+.editor-stack.is-focused .editor:hover {
+  --editor-bottom-padding: 48px;
 }
 
 .editor:empty::before {
@@ -456,7 +491,7 @@ h1 {
   font-size: 0.9em;
   background: var(--code-bg);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--code-ink);
 }
 
@@ -465,7 +500,7 @@ h1 {
   font-size: 0.9em;
   background: var(--pre-bg);
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   overflow-x: auto;
   margin: 0.5em 0;
 }
@@ -670,7 +705,7 @@ h1 {
   height: 26px;
   width: 26px;
   min-width: 26px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
   color: var(--icon);
@@ -680,19 +715,21 @@ h1 {
   width: 14px;
   height: 14px;
   stroke: currentColor;
-  stroke-width: 1.75;
+  stroke-width: 1.9;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .field-inline .inline-icon:hover {
-  background: var(--surface-ghost);
-  border-color: var(--border-soft);
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent-strong);
 }
 
 .field-inline .inline-icon:active {
   background: var(--surface-ghost-active);
+  color: var(--accent-strong);
 }
 
 .field-inline--text {
@@ -750,7 +787,7 @@ h1 {
   width: 264px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   padding: 10px;
   display: none;
@@ -793,7 +830,7 @@ h1 {
 
 .date-picker__day {
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
   color: var(--ink);
@@ -812,11 +849,13 @@ h1 {
 .date-picker__day.is-selected {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--ink);
+  color: var(--accent-strong);
 }
 
 .date-picker__day:hover {
-  border-color: var(--border);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .date-picker__time {
@@ -859,7 +898,7 @@ h1 {
   min-width: 26px;
   min-height: 26px;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .date-picker__sep {
@@ -884,19 +923,21 @@ h1 {
   width: 14px;
   height: 14px;
   stroke: currentColor;
-  stroke-width: 1.75;
+  stroke-width: 1.9;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .field-inline .inline-action:hover {
-  background: var(--surface-ghost);
-  border-color: var(--border-soft);
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent-strong);
 }
 
 .field-inline .inline-action:active {
   background: var(--surface-ghost-active);
+  color: var(--accent-strong);
 }
 
 button {
@@ -916,22 +957,28 @@ button:focus-visible {
 }
 
 .icon-button {
-  padding: 6px 8px;
-  min-width: 28px;
-  min-height: 28px;
+  padding: 0;
+  min-width: 30px;
+  min-height: 30px;
   line-height: 1;
   font-size: 16px;
+  border-radius: var(--radius-sm);
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
+.panel__actions .icon-button {
+  width: 30px;
+  height: 30px;
+}
+
 .icon-button .icon {
   width: 16px;
   height: 16px;
   stroke: currentColor;
-  stroke-width: 1.75;
+  stroke-width: 1.9;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -941,7 +988,7 @@ button:focus-visible {
   width: 16px;
   height: 16px;
   stroke: currentColor;
-  stroke-width: 1.75;
+  stroke-width: 1.9;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -978,12 +1025,12 @@ body.compact .panel__actions {
 }
 
 body.compact .icon-button {
-  min-width: 32px;
-  min-height: 32px;
+  min-width: 30px;
+  min-height: 30px;
 }
 
 body.compact .toolbar {
-  padding: 2px 12px 2px 2px;
+  padding: 4px 8px;
 }
 
 body.compact .toolbar button {
@@ -1005,18 +1052,19 @@ body.compact .toolbar button {
 .ghost {
   background: var(--surface-ghost);
   color: var(--icon);
-  border: 1px solid var(--border-soft);
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--border);
+  box-shadow: none;
 }
 
 .ghost:hover {
   background: var(--surface-ghost-hover);
-  border-color: var(--border);
-  color: var(--icon-strong);
+  border-color: transparent;
+  color: var(--accent-strong);
 }
 
 .ghost:active {
   background: var(--surface-ghost-active);
+  color: var(--accent-strong);
 }
 
 .actions__row {

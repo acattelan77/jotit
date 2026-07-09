@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.2.1",
   "scripts": {
+    "icons:generate": "node scripts/generate_app_icons.mjs",
     "assets:generate": "node scripts/generate_store_assets.mjs"
   }
 }
