@@ -1,0 +1,107 @@
+/*
+  Jot it! — design tokens (v2)
+  Drop-in replacement for the :root / dark-mode block at the top of sidepanel.css.
+  Variable names are unchanged from the original file, so nothing else in
+  sidepanel.css needs to be edited — only these values.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces — neutral, near-white. Warmth lives in ink/accent, not the bg. */
+  --bg: #f7f6f4;
+  --panel: #f7f6f4;
+  --surface: #ffffff;
+  --surface-muted: #f1efec;
+  --surface-ghost: #f1efec;
+  --surface-ghost-hover: #e7ecfb;   /* hover tints toward accent, not gray */
+  --surface-ghost-active: #dbe3f8;
+
+  /* Text */
+  --ink: #292825;
+  --muted: #64625c;
+  --muted-strong: #45433d;
+  --muted-soft: #8b8880;
+  --icon: #64625c;
+  --icon-strong: #292825;
+  --icon-muted: #b0aca4;
+  --placeholder: rgba(100, 98, 92, 0.62);
+
+  /* Accent — refined brand blue (from the "j!" mark), the only saturated color */
+  --accent: #3b5fd9;
+  --accent-strong: #2444ad;
+  --accent-soft: #e7ecfb;
+
+  /* Borders & focus */
+  --border: #e2e0dc;
+  --border-soft: #ececea;
+  --border-hover: #d0cdc7;
+  --border-focus: #3b5fd9;
+
+  --shadow: 0 16px 34px rgba(41, 40, 37, 0.10);
+  --tooltip-bg: #292825;
+  --tooltip-ink: #f7f6f4;
+
+  --link: #2444ad;
+  --code-bg: #eef1fb;
+  --code-ink: #2444ad;
+  --pre-bg: #f1efec;
+
+  --primary-bg: linear-gradient(180deg, #3b5fd9 0%, #2444ad 100%);
+  --primary-ink: #ffffff;
+  --primary-border: #2444ad;
+  --primary-shadow: 0 6px 14px rgba(36, 68, 173, 0.28);
+
+  /* Shape */
+  --radius: 18px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+
+  --font-sans: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1b;
+    --panel: #1c1c1b;
+    --surface: #242322;
+    --surface-muted: #201f1e;
+    --surface-ghost: #242322;
+    --surface-ghost-hover: #2a3050;
+    --surface-ghost-active: #323a63;
+
+    --ink: #eeece9;
+    --muted: #b3b0aa;
+    --muted-strong: #d7d4cf;
+    --muted-soft: #918e87;
+    --icon: #b3b0aa;
+    --icon-strong: #f4f2ef;
+    --icon-muted: #78756e;
+    --placeholder: rgba(179, 176, 170, 0.6);
+
+    --accent: #6d8ffb;
+    --accent-strong: #8ea4fc;
+    --accent-soft: #2a3050;
+
+    --border: #34332f;
+    --border-soft: #2b2a27;
+    --border-hover: #454339;
+    --border-focus: #6d8ffb;
+
+    --shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+    --tooltip-bg: #100f0e;
+    --tooltip-ink: #eeece9;
+
+    --link: #8ea4fc;
+    --code-bg: #232a4d;
+    --code-ink: #b7c6fd;
+    --pre-bg: #201f1e;
+
+    --primary-bg: linear-gradient(180deg, #2c3454 0%, #232a4d 100%);
+    --primary-ink: #eeece9;
+    --primary-border: #2b2a27;
+    --primary-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+  }
+}
