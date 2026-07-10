@@ -130,6 +130,12 @@ delete it (keeps the history legible instead of silently vanishing).
 
 ## Resolved
 
+- **Docked panel note changed while switching tabs** — fixed 2026-07-10.
+  Normal docked opens now prefer window-scoped side-panel presentation, tab
+  activation no longer creates tab-specific panel options, note titles stop
+  auto-following active tabs once the editor has content, and visited-page
+  history is persisted in `noteDraft` so one Markdown note can accumulate
+  sources across multiple articles/tabs.
 - **Code blocks + text highlighting** — shipped 2026-07-09. Toggleable
   toolbar buttons for fenced code blocks (`<pre><code>`) and
   Obsidian-style `==highlight==` (`<mark>`), both round-tripping to/from

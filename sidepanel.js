@@ -372,6 +372,24 @@ const getVisitedPagesForFrontmatter = () =>
       url: entry.url,
     }));
 
+const normalizePageHistory = (entries) => {
+  if (!Array.isArray(entries)) return [];
+  const normalizedEntries = [];
+  entries.forEach((entry) => {
+    const url = normalizeUrl(entry?.url);
+    if (!url || normalizedEntries.some((item) => item.url === url)) return;
+    const title =
+      typeof entry?.title === "string" && entry.title.trim()
+        ? entry.title.trim()
+        : url;
+    const visitedAt = Number.isFinite(entry?.visitedAt)
+      ? entry.visitedAt
+      : Date.now();
+    normalizedEntries.push({ url, title, visitedAt });
+  });
+  return normalizedEntries.slice(-100);
+};
+
 const removeLegacySourceLines = () => {
   const candidates = notesInput.querySelectorAll("p");
   let removed = false;
@@ -473,7 +491,8 @@ const updateEditorStackFocus = () => {
 };
 
 const shouldAutoUpdateTitle = () => {
-  return !titleLocked;
+  if (titleLocked || userEditedTitle) return false;
+  return !hasNoteContent() || !meetingNameInput.value.trim();
 };
 
 const updateTitleFromActiveTab = async () => {
@@ -939,6 +958,11 @@ const updateEditorStats = () => {
   characterCount.textContent = pluralize(characters, "character");
 };
 
+const hasNoteContent = () => {
+  if ((notesInput.textContent || "").trim()) return true;
+  return Boolean(notesInput.querySelector("img, figure.image-attachment, pre"));
+};
+
 const getImageExtensionFromUrl = (value) => {
   try {
     const parsed = new URL(value);
@@ -1205,6 +1229,7 @@ const getFormData = () => ({
   notesText: notesInput.textContent || "",
   pageUrl: currentPageUrl,
   pageTitle: currentPageTitle,
+  pageHistory: normalizePageHistory(pageHistory),
 });
 
 const getDraftData = () => ({
@@ -1213,11 +1238,18 @@ const getDraftData = () => ({
   editorFocused: document.activeElement === notesInput,
 });
 
-const setFormData = ({ meetingName, meetingDate, notes, pageUrl }) => {
+const setFormData = ({
+  meetingName,
+  meetingDate,
+  notes,
+  pageUrl,
+  pageHistory: savedPageHistory,
+}) => {
   meetingNameInput.value = meetingName || "";
   meetingDateInput.value = meetingDate || toLocalDateTimeValue();
   updateMeetingDateDisplay(meetingDateInput.value);
   currentPageUrl = pageUrl || currentPageUrl;
+  pageHistory = normalizePageHistory(savedPageHistory);
   notesInput.innerHTML = markdownToHtml(notes || "");
   removeLegacySourceLines();
   updateEditorStats();
@@ -1517,7 +1549,9 @@ const handleClear = async () => {
     meetingName: "",
     meetingDate: toLocalDateTimeValue(),
     notes: "",
+    pageHistory: [],
   });
+  pageHistory = [];
   updateTitleFromActiveTab().catch(() => {});
   try {
     await storageRemove(STORAGE_KEY);

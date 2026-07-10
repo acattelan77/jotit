@@ -7,7 +7,8 @@ each doc/spec coin its own term for it.
 ## Terms
 
 - **Draft** — the in-progress note state autosaved to
-  `chrome.storage.local["noteDraft"]` on every edit (300ms debounce). Not the
+  `chrome.storage.local["noteDraft"]` on every edit (300ms debounce). It is
+  one active note across browser tabs, not a separate note per tab. Not the
   same as an **export**. Losing the draft loses unsaved work; losing an
   export is recoverable by re-saving.
 - **Export / Save / Save As** — the explicit user action that writes a
@@ -65,7 +66,7 @@ correct them here rather than leaving them stale.
 | Toast/status notifications | `showToast`, `setStatus`, `reportError` — single `#statusMessage` element, variants `default`/`error`/`ambient` |
 | Storage helpers | `storageGet`/`storageGetMultiple`/`storageSet`/`storageRemove` — Promise wrappers around `chrome.storage.local` |
 | Title-lock + context-suggestion state | `setTitleLocked`, `updateContextSuggestion`, `rememberContextForHost` |
-| Page-visit history | `recordPageVisit`, `getVisitedPagesForFrontmatter` — in-memory `pageHistory` array (max 100), feeds `pages_visited` frontmatter |
+| Page-visit history | `recordPageVisit`, `normalizePageHistory`, `getVisitedPagesForFrontmatter` — `pageHistory` array (max 100) persisted inside `noteDraft`, feeds `pages_visited` frontmatter |
 | Caret/selection persistence | `getCaretOffset`, `restoreCaretOffset`, `ensureSelectionInNotes`, `storeNotesSelection`, `getInsertRange` — needed because the contenteditable loses selection on blur/re-render |
 | Title auto-fill from active tab | `shouldAutoUpdateTitle`, `updateTitleFromActiveTab` — branches on standalone vs docked |
 | Panel-open state sync with background | `announcePanelOpen`, `setPanelTabId`, `syncPanelOpenState` |

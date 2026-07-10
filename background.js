@@ -73,6 +73,22 @@ const ensurePanelOptions = async (tabId, source) => {
   }
 };
 
+const ensureWindowPanelOptions = async (source) => {
+  if (!chrome.sidePanel?.setOptions) return;
+  try {
+    await chrome.sidePanel.setOptions({
+      enabled: true,
+      path: "sidepanel.html",
+    });
+    debugLog("background", "WINDOW_PANEL_OPTIONS", { source });
+  } catch (error) {
+    debugLog("background", "WINDOW_PANEL_OPTIONS failed", {
+      source,
+      error: String(error),
+    });
+  }
+};
+
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
@@ -242,21 +258,20 @@ const openSidePanelFromActionClick = async (clickedTab) => {
 
   if (!tabId && !windowId) return;
 
-  // Start enabling the tab panel, but do not await before `open()` to preserve
+  // Start enabling the window panel, but do not await before `open()` to preserve
   // the click gesture context required by `chrome.sidePanel.open()`.
-  const ensurePanelPromise = tabId
-    ? ensurePanelOptions(tabId, "action_click")
-    : Promise.resolve();
+  const ensurePanelPromise = ensureWindowPanelOptions("action_click");
 
   try {
-    if (tabId) {
-      await chrome.sidePanel.open({ tabId });
-    } else {
+    if (windowId) {
       await chrome.sidePanel.open({ windowId });
+    } else if (tabId) {
+      await chrome.sidePanel.open({ tabId });
     }
   } catch (error) {
     if (!tabId) throw error;
     await ensurePanelPromise;
+    await ensurePanelOptions(tabId, "action_click_tab_fallback");
     try {
       await chrome.sidePanel.open({ tabId });
     } catch (retryError) {
@@ -394,7 +409,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "PANEL_OPEN" && Number.isInteger(message.tabId)) {
     openPanelTabs.add(message.tabId);
     debugLog("background", "PANEL_OPEN", { tabId: message.tabId });
-    void ensurePanelOptions(message.tabId, "panel_open");
     void ensureSelectionScript(message.tabId);
     chrome.tabs.sendMessage(message.tabId, { type: "PANEL_OPEN" }, () => {
       if (chrome.runtime.lastError) {
@@ -412,7 +426,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, error: "No active tab." });
         return;
       }
-      ensurePanelOptions(tab.id, "panel_open_active");
       openPanelTabs.add(tab.id);
       debugLog("background", "PANEL_OPEN_ACTIVE", { tabId: tab.id });
       ensureSelectionScript(tab.id);

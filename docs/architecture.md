@@ -49,16 +49,20 @@ legitimately originates from content scripts on arbitrary sites.
 
 ### Opening the panel
 `chrome.action.onClicked` → `openSidePanelFromActionClick(tab)` in
-background.js → `chrome.sidePanel.open({tabId})` (fires immediately, before
-awaiting anything, to preserve the user-gesture context Chrome requires). On
-failure (e.g. a competing sidebar in some Chromium variants), retries once,
-then falls back to opening a standalone window. On success: tab is added to
-`openPanelTabs`, `ensureSelectionScript(tabId)` injects the content script if
-needed, `PANEL_OPEN` is sent to that tab's content script. The panel document
-itself runs `init()` on load: restores draft/context/title-lock from storage,
-updates the title from the active tab, and calls `syncPanelOpenState()` to
-register itself with background (belt-and-suspenders alongside the
-background-side registration).
+background.js → `chrome.sidePanel.open({windowId})` when the window id is
+available (fires immediately, before awaiting anything, to preserve the
+user-gesture context Chrome requires). Opening at window scope keeps one
+docked panel presentation visible while the user browses across tabs. If a
+Chromium variant rejects the window-scoped open, background falls back to a
+tab-scoped open; on continued failure (e.g. a competing sidebar in some
+Chromium variants), it opens a standalone window. On success: the active tab
+is added to `openPanelTabs`, `ensureSelectionScript(tabId)` injects the
+content script if needed, `PANEL_OPEN` is sent to that tab's content script.
+The panel document itself runs `init()` on load: restores
+draft/context/title-lock from storage, updates the title from the active tab
+only while the note is still empty/unstarted, and calls
+`syncPanelOpenState()` to register itself with background
+(belt-and-suspenders alongside the background-side registration).
 
 ### Detach → standalone window → reattach
 User clicks the detach button → panel sends `DETACH_AND_OPEN {tabId}` →
@@ -118,6 +122,11 @@ the explicit Save/Save As actions above.
   notesText: string,          // plain-text fallback (editor textContent)
   pageUrl: string,
   pageTitle: string,
+  pageHistory: Array<{        // visited source pages for this draft, max 100
+    url: string,
+    title: string,
+    visitedAt: number,
+  }>,
   cursorOffset: number|null,  // caret offset in flattened editor text, for restore
   editorFocused: boolean,
 }
@@ -128,6 +137,9 @@ The editor's contenteditable HTML is round-tripped through
 storage always holds Markdown, never raw HTML. Pasted images become
 `![alt](src)`; on reload, data-URI images become real `<img>` tags, remote-URL
 images become a non-editable `<figure class="image-attachment">` placeholder.
+`pageHistory` is saved with the draft so one note can accumulate source pages
+across tab switches and still export the same `pages_visited` list after a
+panel reload.
 
 ### Other storage keys
 

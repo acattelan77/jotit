@@ -16,8 +16,8 @@ explicit export (see [export-and-save.md](export-and-save.md)).
   It stores the editor content as **Markdown**, not HTML — every save/load
   round-trips through `htmlToMarkdown`/`markdownToHtml`.
 - On panel load (`init()`), the last saved draft is restored: title, date,
-  editor content, and caret position (`cursorOffset`) if the editor previously
-  had focus (`editorFocused`).
+  editor content, visited-page history, and caret position (`cursorOffset`)
+  if the editor previously had focus (`editorFocused`).
 - Draft save failures are reported via `reportError`, not silently swallowed
   — but they don't block the user from continuing to type (autosave failure
   isn't fatal to the editing session, only to that one persistence attempt).
@@ -32,6 +32,14 @@ explicit export (see [export-and-save.md](export-and-save.md)).
   time; starting a new note overwrites it.
 - No cross-device sync — `chrome.storage.local` is local to the Chrome
   profile on that machine.
+
+## Tab browsing behavior
+
+- The draft is one active note, not one note per browser tab. Opening the
+  side panel and collecting material across multiple tabs should keep the
+  same editor content and title.
+- The active tab can still contribute source context: `pageHistory` is
+  persisted in the draft and later feeds `pages_visited` during export.
 
 ## Edge cases to preserve
 
