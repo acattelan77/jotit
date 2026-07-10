@@ -1,6 +1,6 @@
 # Privacy Policy - Jot it!
 
-**Last updated:** 2026-07-09
+**Last updated:** 2026-07-10
 
 ## Summary
 
@@ -21,12 +21,18 @@ data to any server. It does not use analytics, ads, or tracking.
   image URLs and local clipboard image data.
 - Local preferences such as title lock, debug logging, and recent context
   suggestions for a site.
+- A library of every note you've written with real content, saved
+  automatically as you type so you can browse, search, reopen, export, or
+  delete it later.
 
 ## Where Data Is Stored
 
 - Draft notes are stored in `chrome.storage.local` on your device.
 - Preferences and per-site context suggestions are stored in
   `chrome.storage.local`.
+- The note library is stored in IndexedDB on your device, in a database local
+  to the extension. It is never sent anywhere; nothing about it leaves your
+  browser.
 - Exported notes are saved as `.md` files through Chrome's Downloads flow. When
   a note includes images, supported image attachments are saved in an
   `attachments/` folder next to the exported note.
@@ -57,6 +63,10 @@ user-initiated export.
 
 - Draft notes remain in local Chrome storage until you clear the note, overwrite
   the draft, clear extension storage, or uninstall the extension.
+- Library entries remain in IndexedDB until you delete them individually from
+  the library view, clear extension storage, or uninstall the extension.
+  Deleting a library entry only removes it from the extension's index — it
+  does not affect any copy of that note already exported to disk.
 - Exported Markdown files and image attachments remain wherever you save them.
 - Recent context suggestions remain in local Chrome storage and are capped to a
   limited set of site entries.

@@ -52,6 +52,12 @@ privacy disclosures, verified permissions, and a clean release package.
 - [ ] Confirm direct export to Downloads.
 - [ ] Confirm Save As export.
 - [ ] Confirm detach and reattach behavior.
+- [ ] Confirm notes with real content are saved to the library automatically,
+  with no explicit save action, and that an auto-filled title alone does not
+  create an entry.
+- [ ] Confirm the library view: search, reopening a note, per-row Save and
+  Delete, and Export all (both the folder-picker and Downloads-fallback
+  paths).
 - [ ] Confirm the current design system in light and dark mode.
 - [ ] Confirm there are no service-worker or side-panel console errors.
 
@@ -64,6 +70,8 @@ privacy disclosures, verified permissions, and a clean release package.
   - pasted local image and copied web image handling;
   - Markdown export through Chrome Downloads;
   - user-initiated image attachment downloads;
+  - the note library (IndexedDB, on-device only, retained until deleted or
+    uninstalled);
   - no analytics or tracking.
 - [ ] Fill Chrome Web Store privacy fields to match the policy.
 - [ ] Prepare concise permission rationale text for each requested permission.
@@ -93,6 +101,7 @@ privacy disclosures, verified permissions, and a clean release package.
   - `sidepanel.html`
   - `sidepanel.css`
   - `sidepanel.js`
+  - `note-library.js`
   - `lib/`
   - `icons/`
   - `fonts/`

@@ -37,10 +37,28 @@
 - [ ] Detach the panel into a standalone window.
 - [ ] Reattach the standalone window to the side panel.
 - [ ] Clear the note and confirm the saved draft is removed.
+- [ ] Write a note and confirm it appears in the library automatically, with
+  no explicit save action.
+- [ ] Confirm an editor with only an auto-filled title and no body text does
+  not create a library entry.
+- [ ] Open the library, search for a note, and confirm results match title,
+  body, and visited-page text.
+- [ ] Click a library row and confirm it loads into the editor and the view
+  switches back to the editor (no confirmation dialog).
+- [ ] Use a library row's Save button and confirm it exports that note without
+  opening it into the editor.
+- [ ] Delete a library row and confirm it's removed from the list, and that
+  any previously exported file for that note is untouched on disk.
+- [ ] Use **Export all** with the folder picker available, and again with it
+  unavailable (or cancelled), and confirm both paths produce correctly
+  structured per-note folders.
+- [ ] Click **New note** while the library view is open and confirm the view
+  switches back to a clean, empty editor.
 
 ## Privacy And Permissions
 
-- [ ] Confirm `PRIVACY.md` matches actual behavior.
+- [ ] Confirm `PRIVACY.md` matches actual behavior, including the note
+  library (IndexedDB, on-device only, retained until deleted or uninstalled).
 - [ ] Confirm the extension still makes no background network requests, aside
   from user-initiated downloads of explicitly pasted web image attachments.
 - [ ] Confirm no analytics or tracking code is present.
@@ -74,6 +92,7 @@
   - `sidepanel.html`
   - `sidepanel.css`
   - `sidepanel.js`
+  - `note-library.js`
   - `lib/`
   - `icons/`
   - `fonts/`

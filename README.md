@@ -21,9 +21,14 @@ window, and exports clean Markdown files when you are done.
   from the web or from a local source, then exports them as Obsidian-friendly
   attachments.
 - Autosaves the in-progress draft locally in Chrome.
+- Automatically saves every note with real content to an in-extension library
+  as you write — no explicit save action required. Browse, search, reopen,
+  export, or delete past notes from the library view.
 - Exports notes as `.md` files through Chrome Downloads, with a Save As option.
   Notes with images are exported as a folder containing the note and an
   `attachments/` directory.
+- Exports every saved note at once ("Export all") into a single chosen folder,
+  or through Chrome Downloads if the folder picker isn't available.
 - Saves note metadata as YAML frontmatter, including title, date, time, and
   pages visited.
 
@@ -71,8 +76,16 @@ Requires Chrome 114 or newer.
 5. Paste an image into the editor when you want it included with the note.
 6. Use **Save .md** to export directly to Downloads, or **Save as...** to choose
    a destination folder when Chrome's folder picker is available. Notes with
-   images export as a self-contained folder for Obsidian.
+   images export as a self-contained folder for Obsidian. Saving is
+   export-only — the note is already kept in the library automatically as you
+   type, whether or not you ever click Save.
 7. Use **New note** to clear the current draft and start fresh.
+8. Click the library icon in the header to browse every note you've written.
+   Search by title, body, or visited page; click a note to reopen it in the
+   editor; use the per-row Save button to export a single note without
+   opening it, or Delete to remove it from the library (this does not delete
+   an already-exported file on disk). Use **Export all** to export every
+   saved note at once.
 
 ## Data And Privacy
 
@@ -80,9 +93,11 @@ Jot it! is local-first. It does not send notes, selections, page titles, URLs,
 or usage data to a server, and it does not include analytics or tracking.
 
 Draft notes, pasted image data, title-lock preference, debug preference, and
-per-site context suggestions are stored in `chrome.storage.local`. Exports are
-saved as Markdown files and image attachments through Chrome's Downloads flow.
-See `PRIVACY.md` for the full policy.
+per-site context suggestions are stored in `chrome.storage.local`. The note
+library (every note you've written, kept for browsing/search/reopen) is
+stored in IndexedDB, on your device only. Exports are saved as Markdown files
+and image attachments through Chrome's Downloads flow. See `PRIVACY.md` for
+the full policy.
 
 ## Permissions
 
@@ -102,8 +117,10 @@ See `PRIVACY.md` for the full policy.
 - `content-selection.js`: selected-text detector for web pages.
 - `sidepanel.html`: extension UI structure.
 - `sidepanel.css`: design system implementation and responsive styling.
-- `sidepanel.js`: editor behavior, local draft storage, context handling, and
-  Markdown export.
+- `sidepanel.js`: editor behavior, local draft storage, context handling, the
+  library view, and Markdown export.
+- `note-library.js`: IndexedDB wrapper for the note library (save, list,
+  search, delete).
 - `lib/note-utils.js`: shared date, filename, URL, and Markdown helpers.
 - `PRIVACY.md`: user-facing privacy policy.
 - `RELEASE_CHECKLIST.md`: pre-release checks for Chrome Web Store publishing.
