@@ -71,6 +71,26 @@
             </svg>
           </button>
           <button
+            id="libraryToggleBtn"
+            class="ghost icon-button"
+            type="button"
+            aria-label="Note library"
+            title="Note library"
+            data-label="Library"
+            aria-pressed="false"
+          >
+            <svg
+              class="icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <rect x="3" y="4" width="18" height="4" rx="1" />
+              <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
+              <line x1="10" y1="12" x2="14" y2="12" />
+            </svg>
+          </button>
+          <button
             id="attachWindow"
             class="ghost icon-button"
             type="button"
@@ -111,7 +131,7 @@
         </div>
       </header>
 
-      <section class="meta">
+      <section id="metaSection" class="meta">
         <label class="field field--context">
           <div class="field-inline field-inline--text">
             <input
@@ -258,7 +278,7 @@
         </div>
       </section>
 
-      <section class="notes">
+      <section id="notesSection" class="notes">
         <div class="field field--notes">
           <div id="selectionCapture" class="selection-capture" hidden>
             <span id="selectionPreview" class="selection-capture__preview"></span>
@@ -365,6 +385,41 @@
         </div>
       </section>
 
+      <section id="libraryView" class="library-view" hidden>
+        <div class="library-view__toolbar">
+          <input
+            id="librarySearch"
+            type="text"
+            class="library-view__search"
+            placeholder="Search saved notes..."
+            autocomplete="off"
+            aria-label="Search saved notes"
+          />
+          <button
+            id="libraryExportAllBtn"
+            class="ghost icon-button"
+            type="button"
+            aria-label="Export all notes"
+            title="Export all notes"
+            data-label="Export all"
+          >
+            <svg
+              class="icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+              <line x1="7" y1="3" x2="17" y2="3" />
+            </svg>
+          </button>
+        </div>
+        <div id="libraryList" class="library-list"></div>
+        <p id="libraryEmptyState" class="library-empty" hidden></p>
+      </section>
+
       <footer class="actions">
         <div id="statusMessage" class="toast" role="status" aria-live="polite"></div>
         <span id="versionNumber" class="version-number">v. 1.2.3</span>
@@ -372,6 +427,7 @@
     </main>
 
     <script src="lib/note-utils.js"></script>
+    <script src="note-library.js"></script>
     <script src="sidepanel.js"></script>
   </body>
 </html>

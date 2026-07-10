@@ -34,10 +34,23 @@ const selectionCapture = document.getElementById("selectionCapture");
 const selectionPreview = document.getElementById("selectionPreview");
 const addSelectionBtn = document.getElementById("addSelectionBtn");
 const dismissSelectionBtn = document.getElementById("dismissSelectionBtn");
+const metaSection = document.getElementById("metaSection");
+const notesSection = document.getElementById("notesSection");
+const libraryToggleBtn = document.getElementById("libraryToggleBtn");
+const libraryView = document.getElementById("libraryView");
+const librarySearchInput = document.getElementById("librarySearch");
+const libraryExportAllBtn = document.getElementById("libraryExportAllBtn");
+const libraryList = document.getElementById("libraryList");
+const libraryEmptyState = document.getElementById("libraryEmptyState");
 
 const NoteUtils = window.NoteUtils;
 if (!NoteUtils) {
   throw new Error("NoteUtils not loaded.");
+}
+
+const NoteLibrary = window.NoteLibrary;
+if (!NoteLibrary) {
+  throw new Error("NoteLibrary not loaded.");
 }
 
 const {
@@ -99,6 +112,9 @@ let lastNotesInsertedAt = 0;
 let pendingPageSelection = null;
 let lastCaretOffset = null;
 let pageHistory = [];
+let currentLibraryEntryId = null;
+let libraryViewOpen = false;
+let libraryEntriesCache = [];
 let debugEnabled = false;
 let contextByHost = {};
 let titleLocked = false;
@@ -1232,10 +1248,11 @@ const getFormData = () => ({
   pageHistory: normalizePageHistory(pageHistory),
 });
 
-const getDraftData = () => ({
-  ...getFormData(),
+const getDraftData = (formData = getFormData()) => ({
+  ...formData,
   cursorOffset: lastCaretOffset,
   editorFocused: document.activeElement === notesInput,
+  libraryEntryId: currentLibraryEntryId,
 });
 
 const setFormData = ({
@@ -1244,19 +1261,22 @@ const setFormData = ({
   notes,
   pageUrl,
   pageHistory: savedPageHistory,
+  libraryEntryId,
 }) => {
   meetingNameInput.value = meetingName || "";
   meetingDateInput.value = meetingDate || toLocalDateTimeValue();
   updateMeetingDateDisplay(meetingDateInput.value);
   currentPageUrl = pageUrl || currentPageUrl;
   pageHistory = normalizePageHistory(savedPageHistory);
+  currentLibraryEntryId = libraryEntryId || null;
   notesInput.innerHTML = markdownToHtml(notes || "");
   removeLegacySourceLines();
   updateEditorStats();
 };
 
 const saveDraft = async () => {
-  const draft = getDraftData();
+  const formData = getFormData();
+  const draft = getDraftData(formData);
   try {
     await storageSet({ [STORAGE_KEY]: draft });
     showToast("Saved locally", {
@@ -1266,6 +1286,17 @@ const saveDraft = async () => {
     });
   } catch (error) {
     reportError("Couldn't save draft locally.", error);
+  }
+  // Every note is automatically kept in the library as the user writes —
+  // there's no explicit "save to library" action; Save/Save As only ever
+  // export to disk (see handleSave/handleSaveAs). Gated on real,
+  // user-authored content (not just an auto-filled title from the active
+  // tab — see hasRealNoteContent) so opening the panel on a page doesn't
+  // by itself spawn an empty library entry. Runs independently of the
+  // draft-storage save above (own try/catch inside saveNoteToLibrary) so a
+  // library-write failure never blocks or is blocked by the draft save.
+  if (hasRealNoteContent()) {
+    await saveNoteToLibrary(formData);
   }
 };
 
@@ -1419,6 +1450,397 @@ const toDownloadFilename = (value) => {
   return /\.md$/i.test(sanitized) ? sanitized : `${sanitized}.md`;
 };
 
+// Side effect of Save/Save As, never of the autosaved draft — see
+// ADR-0006 and docs/specs/note-library.md. `data` is the same pre-export
+// shape getFormData() already builds (Markdown with data-URI/remote image
+// references intact, not the attachments/-rewritten export form), so a
+// library entry can be reloaded straight back into the editor via
+// markdownToHtml with no extra reconstruction step. A failure here must
+// never affect the disk export that already succeeded by the time this
+// runs, so it only ever reports softly (no window.alert, no throw).
+const saveNoteToLibrary = async (data) => {
+  try {
+    const now = Date.now();
+    const existing = currentLibraryEntryId
+      ? await NoteLibrary.getEntry(currentLibraryEntryId)
+      : null;
+    const id = existing ? existing.id : NoteLibrary.generateId();
+    await NoteLibrary.putEntry({
+      id,
+      title: sanitizeMeetingName(data.meetingName),
+      meetingDate: data.meetingDate,
+      notes: data.notes,
+      pageHistory: normalizePageHistory(data.pageHistory),
+      createdAt: existing ? existing.createdAt : now,
+      updatedAt: now,
+    });
+    currentLibraryEntryId = id;
+  } catch (error) {
+    reportError("Couldn't save this note to your library.", error);
+  }
+};
+
+// Whether the editor holds real, user-authored content worth keeping as
+// its own library entry — deliberately stricter than "editor is non-empty":
+// the title auto-fills from the active tab as soon as the panel opens (see
+// context-title-suggestion.md), so a plain non-empty check would spawn a
+// library entry from that alone. Require either actual note-body text, or
+// a title the user deliberately typed/edited (userEditedTitle).
+const hasRealNoteContent = () =>
+  Boolean(
+    notesInput.textContent.trim() ||
+      (userEditedTitle && meetingNameInput.value.trim())
+  );
+
+// Ensures the note currently in the editor is captured in the library
+// before switching away from it (New note / opening a different library
+// entry) — normal autosave already keeps it within ~300ms, this just
+// removes any dependency on that debounce's timing for an action that's
+// about to replace the editor's content outright.
+const flushLibrarySync = async () => {
+  if (!hasRealNoteContent()) return;
+  await saveNoteToLibrary(getFormData());
+};
+
+const noteSnippet = (markdown, maxLen = 90) => {
+  const plain = (markdown || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[`*_>#=~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain.length > maxLen ? `${plain.slice(0, maxLen).trimEnd()}…` : plain;
+};
+
+const openLibraryEntry = async (id) => {
+  // No confirmation needed: the note currently in the editor is already
+  // autosaved to its own library entry (or about to be, via this flush) —
+  // switching to a different one doesn't discard anything.
+  await flushLibrarySync();
+  let entry;
+  try {
+    entry = await NoteLibrary.getEntry(id);
+  } catch (error) {
+    reportError("Couldn't open that note.", error);
+    return;
+  }
+  if (!entry) return;
+  setFormData({
+    meetingName: entry.title,
+    meetingDate: entry.meetingDate,
+    notes: entry.notes,
+    pageUrl: currentPageUrl,
+    pageHistory: entry.pageHistory,
+    libraryEntryId: entry.id,
+  });
+  resetEditorFormatting();
+  debouncedSaveDraft();
+  setLibraryViewOpen(false);
+  notesInput.focus();
+};
+
+const deleteLibraryEntryPrompt = async (entry) => {
+  const label = entry.title || "this note";
+  const confirmed = window.confirm(
+    `Remove "${label}" from the library? This only removes it from Jot it! — it does not delete or affect the exported .md file already on disk.`
+  );
+  if (!confirmed) return;
+  try {
+    await NoteLibrary.deleteEntry(entry.id);
+    if (currentLibraryEntryId === entry.id) {
+      currentLibraryEntryId = null;
+    }
+    await loadLibraryList();
+  } catch (error) {
+    reportError("Couldn't remove that note from the library.", error);
+  }
+};
+
+const renderLibraryList = (searchTerm) => {
+  if (!libraryList) return;
+  const term = (searchTerm || "").trim().toLowerCase();
+  const filtered = !term
+    ? libraryEntriesCache
+    : libraryEntriesCache.filter((entry) => {
+        const haystack = [
+          entry.title || "",
+          entry.notes || "",
+          ...(entry.pageHistory || []).map((page) => page.title || ""),
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(term);
+      });
+
+  libraryList.innerHTML = "";
+
+  if (libraryEmptyState) {
+    if (!libraryEntriesCache.length) {
+      libraryEmptyState.hidden = false;
+      libraryEmptyState.textContent =
+        "No saved notes yet. Notes you save will show up here.";
+    } else if (!filtered.length) {
+      libraryEmptyState.hidden = false;
+      libraryEmptyState.textContent = "No notes match your search.";
+    } else {
+      libraryEmptyState.hidden = true;
+    }
+  }
+
+  filtered.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "library-row";
+    row.dataset.id = entry.id;
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "library-row__open";
+
+    const titleEl = document.createElement("span");
+    titleEl.className = "library-row__title";
+    titleEl.textContent = entry.title || "Untitled note";
+
+    const dateEl = document.createElement("span");
+    dateEl.className = "library-row__date";
+    dateEl.textContent = formatDateTime(new Date(entry.updatedAt));
+
+    const snippetEl = document.createElement("span");
+    snippetEl.className = "library-row__snippet";
+    snippetEl.textContent = noteSnippet(entry.notes);
+
+    open.append(titleEl, dateEl, snippetEl);
+    open.addEventListener("click", () => openLibraryEntry(entry.id));
+
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "library-row__save";
+    save.setAttribute("aria-label", "Save .md");
+    save.title = "Save .md";
+    save.innerHTML =
+      '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />' +
+      '<polyline points="7 10 12 15 17 10" />' +
+      '<line x1="12" y1="15" x2="12" y2="3" />' +
+      "</svg>";
+    save.addEventListener("click", (event) => {
+      event.stopPropagation();
+      exportLibraryEntry(entry);
+    });
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "library-row__delete";
+    del.setAttribute("aria-label", "Remove from library");
+    del.title = "Remove from library (does not delete the exported file)";
+    del.innerHTML =
+      '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<polyline points="4 7 20 7" />' +
+      '<path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />' +
+      '<line x1="10" y1="11" x2="10" y2="17" />' +
+      '<line x1="14" y1="11" x2="14" y2="17" />' +
+      "</svg>";
+    del.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteLibraryEntryPrompt(entry);
+    });
+
+    row.append(open, save, del);
+    libraryList.appendChild(row);
+  });
+};
+
+const loadLibraryList = async () => {
+  if (!libraryList) return;
+  try {
+    libraryEntriesCache = await NoteLibrary.listEntries();
+  } catch (error) {
+    reportError("Couldn't load saved notes.", error);
+    libraryEntriesCache = [];
+  }
+  renderLibraryList(librarySearchInput?.value || "");
+};
+
+const setLibraryViewOpen = (open) => {
+  libraryViewOpen = open;
+  if (libraryView) libraryView.hidden = !open;
+  if (metaSection) metaSection.hidden = open;
+  if (notesSection) notesSection.hidden = open;
+  libraryToggleBtn?.classList.toggle("active", open);
+  libraryToggleBtn?.setAttribute("aria-pressed", String(open));
+  if (open) {
+    loadLibraryList();
+    librarySearchInput?.focus();
+  }
+};
+
+// Exports a single library entry straight to disk without opening it into
+// the editor first — mirrors handleSave's exact single-note behavior
+// (folder only if the note has image attachments, silent saveAs:false
+// download falling back to saveAs:true on error), just operating on a
+// stored entry's data instead of the live editor. Kept as its own
+// duplicate rather than refactored to share code with handleSave/
+// handleSaveAs/exportAllNotes — that consolidation is known-issue #2 in
+// docs/plan/roadmap.md, explicitly left on hold; this follows the same
+// already-accepted duplication pattern rather than touching working,
+// tested code for an unrelated change.
+const exportLibraryEntry = async (entry) => {
+  const data = {
+    meetingName: entry.title,
+    meetingDate: entry.meetingDate,
+    notes: entry.notes,
+  };
+  // buildMarkdown/buildYamlFrontmatter read page-visit history off the
+  // module-level pageHistory variable — swap to this entry's own history
+  // for the export, restore the live editor's regardless of outcome.
+  const originalPageHistory = pageHistory;
+  pageHistory = normalizePageHistory(entry.pageHistory);
+  try {
+    const filename = buildFilename(data);
+    const downloadFilename = toDownloadFilename(filename);
+    const exportData = await buildObsidianImageExport(
+      buildMarkdown(data),
+      downloadFilename
+    );
+    const hasAttachments = exportData.attachments.length > 0;
+    const exportRoot = hasAttachments
+      ? toAttachmentSafeName(downloadFilename.replace(/\.md$/i, ""), "jot-it-note")
+      : "";
+    const payload = exportData.markdown;
+    const mimeType = "text/markdown";
+    const noteDownloadFilename = exportRoot
+      ? `${exportRoot}/${downloadFilename}`
+      : downloadFilename;
+
+    try {
+      await downloadMarkdown(payload, noteDownloadFilename, {
+        saveAs: false,
+        conflictAction: "uniquify",
+        mimeType,
+      });
+      await downloadImageAttachments(exportData.attachments, exportRoot);
+    } catch (error) {
+      if (hasAttachments) {
+        reportError("Image export failed. Please try again.", error);
+        window.alert("Image export failed. Please try again.");
+        return;
+      }
+      await downloadMarkdown(payload, noteDownloadFilename, {
+        saveAs: true,
+        conflictAction: "uniquify",
+        mimeType,
+      });
+      await downloadImageAttachments(exportData.attachments, exportRoot);
+    }
+    showToast(
+      hasAttachments ? "Exported note folder to Downloads" : "Exported to Downloads",
+      { timeoutMs: 1800 }
+    );
+  } catch (error) {
+    reportError(`Couldn't export "${entry.title || "a note"}".`, error);
+    window.alert("Save failed. Please try again.");
+  } finally {
+    pageHistory = originalPageHistory;
+  }
+};
+
+// One-click "get everything back onto disk" — reuses the exact same
+// per-note export mechanics as Save As (buildObsidianImageExport,
+// writeTextFile/writeAttachmentsToDirectory, or the chrome.downloads
+// fallback), just looped over every library entry. Every note gets its
+// own subfolder under the chosen destination (<slug>/<filename>.md, +
+// attachments/ if needed) — unlike a single Save As, this always creates
+// a folder per note (even with no images) since many notes are being
+// written into one shared destination and need distinguishable paths.
+// See docs/specs/note-library.md.
+const exportAllNotes = async () => {
+  let entries;
+  try {
+    entries = await NoteLibrary.listEntries();
+  } catch (error) {
+    reportError("Couldn't load the note library.", error);
+    return;
+  }
+  if (!entries.length) {
+    showToast("No saved notes to export", { timeoutMs: 1800 });
+    return;
+  }
+
+  let directoryHandle = null;
+  if (typeof window.showDirectoryPicker === "function") {
+    try {
+      directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      reportError("Couldn't open folder picker.", error);
+      return;
+    }
+  }
+
+  // buildMarkdown/buildYamlFrontmatter read page-visit history off the
+  // module-level `pageHistory` variable (the currently-open note's), not
+  // from an argument — swap it to each entry's own history for the
+  // duration of that entry's export, and restore the live editor's actual
+  // history no matter how the loop ends.
+  const originalPageHistory = pageHistory;
+  let successCount = 0;
+  try {
+    for (const entry of entries) {
+      const data = {
+        meetingName: entry.title,
+        meetingDate: entry.meetingDate,
+        notes: entry.notes,
+      };
+      pageHistory = normalizePageHistory(entry.pageHistory);
+      try {
+        const filename = buildFilename(data);
+        const downloadFilename = toDownloadFilename(filename);
+        const exportData = await buildObsidianImageExport(
+          buildMarkdown(data),
+          downloadFilename
+        );
+        const entryFolderName = toAttachmentSafeName(
+          downloadFilename.replace(/\.md$/i, ""),
+          "jot-it-note"
+        );
+
+        if (directoryHandle) {
+          const entryDir = await directoryHandle.getDirectoryHandle(
+            entryFolderName,
+            { create: true }
+          );
+          await writeTextFile(
+            entryDir,
+            downloadFilename,
+            exportData.markdown,
+            "text/markdown"
+          );
+          await writeAttachmentsToDirectory(entryDir, exportData.attachments);
+        } else {
+          await downloadMarkdown(
+            exportData.markdown,
+            `${entryFolderName}/${downloadFilename}`,
+            { saveAs: false, conflictAction: "uniquify", mimeType: "text/markdown" }
+          );
+          await downloadImageAttachments(exportData.attachments, entryFolderName);
+          // Chrome warns/blocks after a handful of downloads triggered in
+          // quick succession from one page — throttle between notes.
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+        successCount += 1;
+      } catch (error) {
+        reportError(`Couldn't export "${entry.title || "a note"}".`, error);
+      }
+    }
+  } finally {
+    pageHistory = originalPageHistory;
+  }
+
+  showToast(`Exported ${successCount} of ${entries.length} notes`, {
+    timeoutMs: 2400,
+  });
+};
+
 const handleSave = async () => {
   const data = getFormData();
   const filename = buildFilename(data);
@@ -1540,10 +1962,10 @@ const handleSaveAs = async () => {
 };
 
 const handleClear = async () => {
-  const hasContent = meetingNameInput.value || notesInput.textContent.trim();
-  if (hasContent && !window.confirm("Clear this note and start fresh?")) {
-    return;
-  }
+  // No confirmation needed: the current note (if any) is already autosaved
+  // to its own library entry (or about to be, via this flush) — starting a
+  // new note doesn't lose it, it stays findable in the library.
+  await flushLibrarySync();
 
   setFormData({
     meetingName: "",
@@ -1561,6 +1983,7 @@ const handleClear = async () => {
   resetEditorFormatting();
   notesInput.innerHTML = "";
   updateEditorStats();
+  setLibraryViewOpen(false);
   notesInput.focus();
 };
 
@@ -1910,6 +2333,18 @@ const init = async () => {
   updateEditorStats();
   updateContextSuggestion();
   syncPanelOpenState();
+  // Covers the migration gap for a draft that already had real body
+  // content before this feature existed (or one the user never touches
+  // again after this reload) — every other case is covered by the
+  // autosave in saveDraft() reacting to the next edit. Deliberately checks
+  // body text directly rather than hasRealNoteContent()'s title fallback:
+  // init() always sets userEditedTitle from whatever title the draft
+  // happened to have (see above), even if it was only ever auto-filled,
+  // so the title-based signal isn't trustworthy immediately after a
+  // reload the way it is when it's set live by the user actually typing.
+  if (notesInput.textContent.trim()) {
+    saveNoteToLibrary(getFormData()).catch(() => {});
+  }
 };
 
 attachTabListeners();
@@ -2090,6 +2525,13 @@ window.addEventListener("beforeunload", () => {
 saveButton.addEventListener("click", handleSave);
 saveAsBtn?.addEventListener("click", handleSaveAs);
 clearButton.addEventListener("click", handleClear);
+libraryToggleBtn?.addEventListener("click", () => {
+  setLibraryViewOpen(!libraryViewOpen);
+});
+librarySearchInput?.addEventListener("input", () => {
+  renderLibraryList(librarySearchInput.value);
+});
+libraryExportAllBtn?.addEventListener("click", exportAllNotes);
 openWindowButton?.addEventListener("click", async () => {
   const tab = await getActiveTab();
   const tabId = Number.isInteger(panelTabId) ? panelTabId : tab?.id;

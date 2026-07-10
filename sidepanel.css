@@ -267,6 +267,15 @@ h1 {
   gap: 10px;
 }
 
+/* Same equal-specificity-vs-[hidden] issue as .library-view below — the
+   class rule above would otherwise win the cascade and keep these visible
+   even while JS sets their `hidden` attribute when switching to the
+   library view. */
+.meta[hidden],
+.notes[hidden] {
+  display: none;
+}
+
 .notes {
   flex: 1;
   min-height: 0;
@@ -711,6 +720,154 @@ h1 {
   border: none;
   border-top: 1px solid var(--border);
   margin: 1em 0;
+}
+
+/* Note library */
+.library-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  margin-top: 3px;
+}
+
+/* [hidden] and .library-view{display:flex} have equal CSS specificity, so
+   the class rule above would otherwise win the cascade and show this
+   section even while its `hidden` attribute is set. */
+.library-view[hidden] {
+  display: none;
+}
+
+.library-view__toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.library-view__search {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.03);
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.library-view__search:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.library-view__search::placeholder {
+  color: var(--placeholder);
+}
+
+.library-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.library-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.library-row:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-muted);
+}
+
+.library-row__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+}
+
+.library-row__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-row__date {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted-soft);
+}
+
+.library-row__snippet {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-row__save,
+.library-row__delete {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--icon-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.library-row__save:hover,
+.library-row__delete:hover {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.library-row__save .icon,
+.library-row__delete .icon {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.library-empty {
+  margin: 24px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted-soft);
 }
 
 .field-group {

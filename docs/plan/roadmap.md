@@ -9,11 +9,10 @@ change.
 
 ## Now
 
-*(Unit tests for `lib/note-utils.js` are done — see Resolved below. Picking
-up the note library next: [ADR-0006](../decisions/0006-note-library-via-indexeddb.md)
-+ [note-library.md](../specs/note-library.md) are fully scoped, implementation
-starting. Syntax highlighting and the smaller tech-debt backlog items are on
-hold — not actively being worked.)*
+*(Unit tests for `lib/note-utils.js` and the note library are both done —
+see Resolved below. Nothing actively in progress. Syntax highlighting and
+the tech-debt backlog are on hold per the product owner's direction — don't
+pick those up without being asked.)*
 
 ## Next (suggested, unordered — pick based on what you're actually asked to
 do; this isn't a mandate)
@@ -23,24 +22,6 @@ do; this isn't a mandate)
   service-worker-eviction gap described in
   [ADR-0002](../decisions/0002-storage-local-shared-state.md). Write a new
   ADR if you do this.
-- **Note library — storage + browsable list + bulk export (scoped, ready to
-  implement).** Originally two open-ended proposals ("durable storage" and
-  "browser with frontmatter search/linking"); scoped down on 2026-07-09 at
-  the product owner's direction to explicitly **drop linking** and keep this
-  to storage plus a flat, searchable, reverse-chronological list — closer to
-  Evernote, not Obsidian's graph. A bulk **"export all notes"** command was
-  added to the scope the same day — explicitly a follow-on that depends on
-  the storage piece existing first, reusing the existing per-note export
-  mechanics in a loop rather than a new export format. Fully scoped in
-  [ADR-0006](../decisions/0006-note-library-via-indexeddb.md) (Proposed —
-  IndexedDB, scoped to the panel document, entries created only on explicit
-  Save/Save As, verified storage capacity is disk-space-bound not a small
-  fixed cap) and [note-library.md](../specs/note-library.md) (behavior spec,
-  written ahead of implementation, includes the bulk-export command). A few
-  open questions are left for implementation time (see that spec's "Open
-  questions" section) — this is ready to pick up, not blocked on further
-  scoping. Implementation order within this item: storage/list first, bulk
-  export second (it has nothing to export until the library exists).
 
 ## Proposed features (requested, not yet scoped or started)
 
@@ -118,9 +99,66 @@ delete it (keeps the history legible instead of silently vanishing).
    becomes `null`, downstream code just no-ops) instead of erroring loudly.
    Worth a lint rule or startup assertion if this ever causes a real bug
    during a refactor.
+10. **Title auto-fill can race the async draft restore on load** —
+    discovered 2026-07-10 while verifying [ADR-0007](../decisions/0007-autosave-to-library.md)
+    in a real browser, not fixed (out of scope for that work). `init()`
+    restores the draft's title asynchronously (`await storageGetMultiple(...)`)
+    before setting `userEditedTitle` to protect it from auto-fill; the
+    `window` `"focus"` listener (`sidepanel.js`, near the bottom) also calls
+    `updateTitleFromActiveTab()`, and if that event fires during the async
+    gap — observed reliably when reloading a full page in a test harness,
+    plausibility in the real docked side-panel context not yet checked —
+    `userEditedTitle` is still at its module-load default (`false`), so the
+    active tab's title can overwrite a just-restored one before `init()`
+    ever gets to protect it. Needs its own investigation (possibly: set
+    `userEditedTitle` synchronously from a value cached before the `await`,
+    or guard the focus listener until `init()` has completed) — don't
+    attempt a fix inline as part of unrelated work without understanding
+    the full auto-fill state machine first.
 
 ## Resolved
 
+- **Notes are saved to the library automatically — no explicit Save
+  required** — shipped 2026-07-10, same day as the note library itself (see
+  the entry directly below), superseding that entry's original "only on
+  explicit Save/Save As" design per explicit product-owner direction. See
+  [ADR-0007](../decisions/0007-autosave-to-library.md). The same debounced
+  autosave that already wrote the draft now also keeps the library entry
+  up to date (gated on real content, so an auto-filled title alone doesn't
+  spawn an empty entry — `hasRealNoteContent()`); Save and Save As are now
+  pure disk-export actions with no library involvement at all. Removed two
+  "discard unsaved changes?" confirmation dialogs (New note, opening a
+  different library entry) since nothing is lost under this model — one
+  final synchronous flush write happens right before either action
+  (`flushLibrarySync()`). A one-time migration sync also runs in `init()`
+  for a draft restored with real *body* content (deliberately checked
+  directly rather than via `hasRealNoteContent()`'s title fallback — testing
+  found that `init()` isn't a safe context to trust the title signal in, see
+  known-issue #10 below). Verified in a real browser: typing alone (no Save
+  click) creates a library entry; a reload with only a title and no body
+  does not spawn an entry; Save/Save As leave the library entry count and
+  content untouched (confirmed exactly one download fires, entry count
+  unchanged); New note and opening another entry both correctly preserve
+  the just-edited note via the flush, with zero `window.confirm` calls;
+  deliberately typing a title with no body still correctly creates an
+  entry (the intended exception to "body required").
+- **Note library — storage + browsable list + bulk export** — shipped
+  2026-07-10. IndexedDB-backed ([ADR-0006](../decisions/0006-note-library-via-indexeddb.md),
+  now Accepted), a toggle view (`#libraryView`) with search, open, and
+  delete, and a bulk "Export all notes" command reusing the normal per-note
+  export path in a loop. One deliberate deviation from the original spec:
+  images are stored inline in the Markdown text (same shape as the draft),
+  not as separate Blobs — simpler, and IndexedDB's realistic multi-hundred
+  -MB-to-GB capacity makes the base64 overhead a non-issue. Verified in a
+  real browser: save/re-save-updates-same-entry, search matching body text
+  not just titles, open-and-reload round-trip, delete, and both bulk-export
+  paths (directory picker and the throttled `chrome.downloads` fallback)
+  producing correct per-note folder structure with each note's own
+  `pages_visited` frontmatter (not a leaked shared one — a real bug caught
+  and fixed during implementation, see
+  [note-library.md](../specs/note-library.md)). Details in
+  [architecture.md](../architecture.md#note-library-indexeddb) and
+  [note-library.md](../specs/note-library.md).
 - **No automated test coverage / CI was a no-op** — fixed 2026-07-10. Added
   `test/note-utils.test.js`: 79 tests covering `lib/note-utils.js` (filename
   building, URL/image normalization, and both directions of the

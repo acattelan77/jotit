@@ -1,7 +1,7 @@
 # 0006. Local note library, stored in IndexedDB, scoped to the panel document
 
-Status: Proposed
-Date: 2026-07-09
+Status: Accepted
+Date: 2026-07-09 (implemented 2026-07-10)
 
 ## Context
 
@@ -74,27 +74,55 @@ convenience feature, not their notes.
    document (no new manifest permission, no background/content-script
    involvement — same pattern as the panel document already using
    `chrome.downloads`/File System Access APIs directly for export).
-2. A library entry is created/updated **only on explicit Save or Save As**
-   — never from the autosaved draft. This matches the existing mental model
-   (draft = scratch, export = deliberate "this is a finished note") and
-   keeps the library's semantics simple: it's your export history, not a
-   version history of every edit.
+2. ~~A library entry is created/updated only on explicit Save or Save As —
+   never from the autosaved draft.~~ **Superseded 2026-07-10 by
+   [ADR-0007](0007-autosave-to-library.md):** library entries are now
+   created/updated automatically by the same autosave that writes the
+   draft, and Save/Save As are pure disk-export actions with no library
+   side effect. The reasoning below is kept for the historical record, not
+   because it still holds — see ADR-0007 for the current behavior and why
+   it changed. ~~This matches the existing mental model (draft = scratch,
+   export = deliberate "this is a finished note") and keeps the library's
+   semantics simple: it's your export history, not a version history of
+   every edit.~~
 3. Re-saving a note that was opened from the library **updates that same
    entry** (matched by an internal id, not by filename) rather than creating
-   a duplicate. On-disk export/filename behavior is unchanged — this ADR
+   a duplicate — still true under ADR-0007, only *when* a new id gets
+   minted changed. On-disk export/filename behavior is unchanged — this ADR
    does not alter [export-and-save.md](../specs/export-and-save.md)'s
-   existing Save/Save As mechanics, it only adds a side-effect write to the
-   library alongside them.
+   existing Save/Save As mechanics. (It originally added a library-write
+   side effect to Save/Save As here too; ADR-0007 removed that side effect.)
 4. Each entry stores the full note content (frontmatter fields + Markdown
-   body) and any image attachments as Blobs — enough to fully reconstruct
-   and reopen the note in the editor without re-reading the exported file
-   from disk (the extension generally can't re-read arbitrary
-   downloaded-file paths later anyway).
+   body) — enough to fully reconstruct and reopen the note in the editor
+   without re-reading the exported file from disk (the extension generally
+   can't re-read arbitrary downloaded-file paths later anyway). **Deviation
+   from the original "images as Blobs" plan (resolved during
+   implementation, 2026-07-10):** the stored `notes` field is the same
+   pre-export Markdown `getFormData()` already builds for the draft — data
+   -URI images are inline in the text (they already *are* the image data,
+   just base64-text-encoded) and remote images stay as plain URL
+   references, refetched at export time exactly as today. This fully
+   satisfies "reconstructable without re-reading the disk file" without a
+   second Blob-keyed-by-path storage/retrieval path: the export-time
+   `attachments/<note>-image-N.ext` relative paths are export-only and
+   never touch the library. A separate Blob store would only pay off at a
+   scale (many large images) this app doesn't operate at — IndexedDB's
+   realistic multi-hundred-MB-to-GB capacity (see Context above) makes the
+   ~33% base64 overhead a non-issue in practice. If that changes, this is
+   the thing to revisit, not silently work around.
 5. **Explicitly out of scope for this ADR:** note-to-note linking (wiki
    links, backlinks, graph view), tags, full-text search ranking/indexing
    beyond simple substring matching, multi-device sync. See
    [`docs/specs/note-library.md`](../specs/note-library.md) for the
    behavior spec.
+
+## Schema (as implemented, 2026-07-10)
+
+Database `"jotit-library"`, version 1, single object store `"notes"`
+(`keyPath: "id"`), one index `"updatedAt"` (non-unique) used to list entries
+reverse-chronologically via a cursor. See `note-library.js` and
+[`docs/architecture.md`](../architecture.md#note-library-indexeddb) for the
+full entry shape and API.
 
 ## Consequences
 
@@ -106,16 +134,20 @@ convenience feature, not their notes.
 - **Harder:** two persistence mechanisms now exist in the codebase
   (`chrome.storage.local` for draft/preferences, IndexedDB for the library)
   where there was one — a future agent needs to know which one a given piece
-  of state belongs in. This ADR is that record; `docs/architecture.md`
-  should be updated to document the IndexedDB schema once implemented.
+  of state belongs in. This ADR is that record; see
+  [`docs/architecture.md`](../architecture.md#note-library-indexeddb) for
+  the schema.
 - **Resolved (see Context above):** storage capacity is effectively bounded
   by the user's free disk space (typically hundreds of MB to several GB in
   practice), not a small fixed cap — no `unlimitedStorage` permission
-  needed. Remaining implementation-time task: actually call
-  `navigator.storage.persist()` and record in `docs/architecture.md` whether
-  Chrome granted it (persistence grants aren't guaranteed to succeed for
-  every profile/usage pattern) — don't just assume the call succeeds
-  silently.
+  needed. Confirmed via `navigator.storage.estimate()` in a real browser
+  during implementation testing (quota reported in the multi-GB range on
+  the test machine). `navigator.storage.persist()` is called once per
+  session (`note-library.js`, best-effort, logs the outcome via
+  `console.info`) — tested directly: on a fresh low-engagement origin
+  Chrome denies the grant (`persisted: false`), exactly the "not guaranteed"
+  case this ADR anticipated. That's expected and fine — it's why the
+  library is a convenience index, not the source of truth (see Context).
 - **Forecloses (without a superseding ADR):** treating this library as the
   primary/only copy of a note (it isn't — the exported file is), and adding
   linking/graph/tagging features on top of it without revisiting the

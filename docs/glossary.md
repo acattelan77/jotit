@@ -42,13 +42,18 @@ each doc/spec coin its own term for it.
   the Markdown.
 - **Frontmatter** — the YAML block at the top of an exported note
   (`title`, `date`, `time`, `datetime`, `pages_visited`).
-- **Note library** *(proposed, not yet implemented — see
-  [ADR-0006](decisions/0006-note-library-via-indexeddb.md))* — an IndexedDB
-  store of previously exported notes, scoped to the panel document, enabling
-  browse/search of past notes from inside the extension. Distinct from the
-  **draft** (single in-progress note) and from the exported `.md` file on
-  disk (which remains the durable source of truth). Deliberately excludes
-  note-to-note linking — see [note-library.md](specs/note-library.md).
+- **Note library** — an IndexedDB store (`note-library.js`,
+  `window.NoteLibrary`) of every note with real content the user has
+  written, scoped to the panel document, enabling browse/search/reopen/
+  bulk-export from inside the extension. Kept up to date automatically by
+  the same autosave that persists the draft — not tied to exporting (see
+  [ADR-0007](decisions/0007-autosave-to-library.md)). Distinct from the
+  **draft** (the single currently-open note's `chrome.storage.local` copy)
+  and from an exported `.md` file on disk, which a library entry may or may
+  not have one of at any given time. Deliberately excludes note-to-note
+  linking — see
+  [ADR-0006](decisions/0006-note-library-via-indexeddb.md) and
+  [note-library.md](specs/note-library.md).
 - **NoteUtils** — the shared pure-function library (`lib/note-utils.js`)
   used by `sidepanel.js` for filename building and Markdown↔HTML conversion.
   Anything that doesn't touch `chrome.*` APIs or the DOM and could plausibly
@@ -74,8 +79,9 @@ correct them here rather than leaving them stale.
 | Word/char stats | `countWords` (uses `Intl.Segmenter` if available), `updateEditorStats` |
 | Image handling (paste/drop/insert) | Local duplicates of note-utils image constants/helpers, `readFileAsDataUrl`, `dataUrlToBlob`, `createRemoteImagePlaceholder`, `insertImageIntoEditor`, `buildObsidianImageExport` |
 | Markdown/YAML export construction | `toYamlString`, `buildYamlFrontmatter`, `buildMarkdown`, `getFormData`/`getDraftData` |
-| Draft persistence | `setFormData`, `saveDraft`, `debouncedSaveDraft`, `resetEditorFormatting` |
-| Download / Save / Save As | `downloadMarkdown`, `downloadBlob`, `fetchRemoteAttachmentBlob`, `downloadImageAttachments`, File System Access helpers, `handleSave`, `handleSaveAs`, `handleClear` |
+| Draft persistence | `setFormData`, `saveDraft` (also syncs the note library — see below), `debouncedSaveDraft`, `resetEditorFormatting` |
+| Note library | `saveNoteToLibrary` (called from `saveDraft`/`init`/`flushLibrarySync`, never from `handleSave`/`handleSaveAs` — see [ADR-0007](decisions/0007-autosave-to-library.md)), `hasRealNoteContent`, `flushLibrarySync`, `openLibraryEntry`, `deleteLibraryEntryPrompt`, `renderLibraryList`, `loadLibraryList`, `setLibraryViewOpen`, `exportAllNotes`, `noteSnippet` — talks to `window.NoteLibrary` (`note-library.js`), see [architecture.md](architecture.md#note-library-indexeddb) |
+| Download / Save / Save As | `downloadMarkdown`, `downloadBlob`, `fetchRemoteAttachmentBlob`, `downloadImageAttachments`, File System Access helpers, `handleSave`, `handleSaveAs`, `handleClear` — `handleSave`/`handleSaveAs` are pure disk-export, no note-library involvement (see [ADR-0007](decisions/0007-autosave-to-library.md)); `handleClear` flushes the current note to the library before clearing |
 | Incoming selection-candidate handling | `onMessage` listener for `PAGE_SELECTION_CANDIDATE`, `addPendingPageSelection`, `insertSelectionWithLink` |
 | Tab-change listeners | `attachTabListeners` — different listener sets for standalone vs docked |
 | Date/time picker | `parseDateValue`, `updateMeetingDateDisplay`, `setMeetingDateValue`, `renderDatePicker`, `adjustTime`, open/close + keyboard nav |

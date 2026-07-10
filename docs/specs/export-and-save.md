@@ -3,10 +3,13 @@
 ## Purpose
 
 Turn the in-progress note into a portable `.md` file (plus attachments, if
-any) that works well as an Obsidian vault note — this is the actual
-deliverable of using the app; the draft (see
-[draft-persistence.md](draft-persistence.md)) is scratch state, this is the
-output.
+any) that works well as an Obsidian vault note. **This is disk export
+only.** Since [ADR-0007](../decisions/0007-autosave-to-library.md), Save and
+Save As have no other effect — they don't touch the
+[note library](note-library.md), which is kept up to date automatically by
+autosave regardless of whether the user ever exports. Don't reintroduce a
+library-write side effect here; if you're tempted to, read ADR-0007 first —
+that's exactly the design it replaced.
 
 ## Output shape
 

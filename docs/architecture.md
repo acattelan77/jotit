@@ -108,7 +108,10 @@ These two paths independently duplicate a fair amount of logic — see
 
 Every keystroke also independently autosaves the *draft* (not an export) to
 `chrome.storage.local["noteDraft"]` via a 300ms-debounced save — unrelated to
-the explicit Save/Save As actions above.
+the explicit Save/Save As actions above. That same autosave is also what
+keeps the [note library](#note-library-indexeddb) up to date — see
+[ADR-0007](decisions/0007-autosave-to-library.md); Save/Save As have no
+library-related effect at all.
 
 ## Data model
 
@@ -150,6 +153,78 @@ panel reload.
 | `titleLockEnabled` | boolean | panel | panel |
 | `debugLogsEnabled` | boolean | any context (debug console) | all three contexts, via `chrome.storage.onChanged` |
 
+### Note library (IndexedDB)
+
+A second, separate persistence layer from everything above — see
+[ADR-0006](decisions/0006-note-library-via-indexeddb.md) (storage) and
+[ADR-0007](decisions/0007-autosave-to-library.md) (when entries are
+created — autosave, not explicit Save/Save As). Browsable/searchable
+history of the user's notes, scoped entirely to the panel document
+(`note-library.js`, exposing `window.NoteLibrary`, loaded before
+`sidepanel.js`). No manifest permission, no background/content-script
+involvement.
+
+- **Database:** `"jotit-library"`, version 1.
+- **Object store:** `"notes"`, `keyPath: "id"` (a `crypto.randomUUID()`).
+- **Index:** `"updatedAt"` (non-unique) — entries are listed by opening a
+  cursor on this index with direction `"prev"`, giving reverse-chronological
+  order without loading and sorting in JS.
+
+Entry shape:
+
+```js
+{
+  id: string,               // uuid
+  title: string,
+  meetingDate: string,      // "YYYY-MM-DDTHH:MM", same shape as the draft
+  notes: string,             // pre-export Markdown — same shape getFormData()
+                              // builds for the draft: data-URI images inline,
+                              // remote images as plain URL references. NOT
+                              // the attachments/-rewritten export form (see
+                              // ADR-0006's "images as Blobs" deviation note).
+  pageHistory: [{url, title, visitedAt}],
+  createdAt: number,        // ms epoch, set once
+  updatedAt: number,        // ms epoch, bumped on every save
+}
+```
+
+- **Written by:** `saveNoteToLibrary()`, called from `saveDraft()` — the
+  same debounced (300ms) autosave that writes `chrome.storage.local`'s
+  draft — whenever `hasRealNoteContent()` is true. Also called once from
+  `init()` for a restored draft that already has real content (covers a
+  draft written before this existed, or one never edited again after a
+  reload), and from `flushLibrarySync()` for an immediate, non-debounced
+  write right before the editor's content is about to be replaced (New
+  note, opening a different library entry). **Save and Save As never call
+  it** — they're pure disk-export actions, see
+  [export-and-save.md](specs/export-and-save.md). A library-write failure
+  is caught and reported softly (`reportError`, no `window.alert`) and
+  never affects the draft write it runs alongside.
+- **`hasRealNoteContent()`** gates all of the above: real note-body text,
+  or a title the user *deliberately* typed/edited (`userEditedTitle`) —
+  not just the title auto-filling from the active tab on panel open (see
+  [context-title-suggestion.md](specs/context-title-suggestion.md)), which
+  would otherwise spawn an empty library entry from simply opening the
+  panel on any page.
+- **Read/updated by:** `openLibraryEntry()` (flushes the current note first,
+  then loads the target entry back into the editor via
+  `setFormData`/`markdownToHtml` — no special reconstruction needed, see the
+  `notes` field note above, and no confirmation prompt — nothing is
+  discarded, see ADR-0007), `renderLibraryList()` / `loadLibraryList()` (the
+  list/search UI), `exportAllNotes()` (bulk export, reuses the normal
+  per-note export path in a loop).
+- **`currentLibraryEntryId`** (`sidepanel.js` module state) tracks which
+  entry, if any, the open editor content corresponds to; persisted in the
+  draft (`noteDraft.libraryEntryId`) so it survives a panel reload. Further
+  autosaves update that same entry rather than creating a duplicate; "New
+  note" flushes the current note (if any) then resets it to `null`, so the
+  next autosave with real content starts a fresh entry.
+- **`navigator.storage.persist()`** is requested once per session
+  (`note-library.js`, best-effort — logs the outcome via `console.info`,
+  never throws). Confirmed in testing: on a fresh, low-engagement origin
+  Chrome denies the grant (`persisted: false`) — expected, not a bug; see
+  [ADR-0006](decisions/0006-note-library-via-indexeddb.md).
+
 ### Exported Markdown
 
 ```markdown
@@ -185,11 +260,19 @@ Filenames: `"YYYY-MM-DD - hHH:MM - <safe title>.md"`
 
 ## Module map
 
-`sidepanel.js` is a single ~2220-line file with no ES modules — see
+`sidepanel.js` is a single ~2400-line file with no ES modules — see
 [`glossary.md`](glossary.md) for the full region-by-region responsibility
 map and line ranges. Read that before adding new top-level functions so new
 code lands in the right conceptual region instead of at the bottom of the
 file regardless of what it does.
+
+`note-library.js` is a second small standalone script (loaded before
+`sidepanel.js`, after `lib/note-utils.js`), exposing `window.NoteLibrary`.
+Unlike `lib/note-utils.js` it isn't dependency-free/portable-to-Node — it's
+a thin IndexedDB wrapper, browser-only by nature — so it lives at the repo
+root as its own file rather than in `lib/`, matching `background.js`/
+`content-selection.js`'s pattern of "one file per browser-API-bound
+concern" rather than being folded into the already-large `sidepanel.js`.
 
 ## Permissions (manifest.json)
 

@@ -31,7 +31,7 @@ handoff entry of its own); either way it needed finishing and landing.
   self-contained to this file), added a Resolved entry, and updated "Now" to
   point at the note library as the actively-picked-up work.
 - Added an addendum to
-  [ADR-0003](../decisions/0003-hand-rolled-markdown-conversion.md)
+  [ADR-0003](../../decisions/0003-hand-rolled-markdown-conversion.md)
   documenting the blockquote bug and generalizing the lesson: any
   `markdownToHtml` regex pass keyed on `<`, `>`, or `&` needs to run before
   the initial escaping step touches that character, or be stashed like
@@ -55,14 +55,14 @@ introduced by the roadmap renumbering.
 ## Docs updated
 
 `docs/plan/roadmap.md` (Next/Known Issues/Resolved/Now sections),
-[ADR-0003](../decisions/0003-hand-rolled-markdown-conversion.md), this file.
+[ADR-0003](../../decisions/0003-hand-rolled-markdown-conversion.md), this file.
 
 ## Left for next time
 
 Next actively-picked-up work per the updated roadmap "Now" section: the
 **note library** (storage + browsable list + bulk export) — see
-[ADR-0006](../decisions/0006-note-library-via-indexeddb.md) and
-[note-library.md](../specs/note-library.md), both already fully scoped from
+[ADR-0006](../../decisions/0006-note-library-via-indexeddb.md) and
+[note-library.md](../../specs/note-library.md), both already fully scoped from
 an earlier session, nothing implemented yet. Syntax highlighting and the
 remaining tech-debt backlog items are explicitly on hold per the user's
 direction this session — don't pick those up without being asked.

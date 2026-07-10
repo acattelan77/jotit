@@ -24,7 +24,12 @@ one of those don't need an ADR — put that context in the relevant
    that every agent should know it up front (most aren't — only add the ones
    that would otherwise get silently violated).
 4. If it reverses an earlier ADR, set that ADR's status to `Superseded by
-   NNNN` and link both ways.
+   NNNN` and link both ways. If it only reverses *one* decision point of a
+   multi-point ADR (the rest still holds), don't mark the whole ADR
+   superseded — annotate the specific point in place (e.g.
+   `~~old text~~` + a pointer to the new ADR) and note "decision N
+   superseded by NNNN" in the index instead, so the parts that are still
+   true don't read as obsolete.
 
 ## Index
 
@@ -35,4 +40,5 @@ one of those don't need an ADR — put that context in the relevant
 | [0003](0003-hand-rolled-markdown-conversion.md) | Hand-rolled Markdown↔HTML conversion and YAML frontmatter serialization | Accepted |
 | [0004](0004-local-first-no-telemetry.md) | Local-first, no telemetry, no external servers | Accepted |
 | [0005](0005-single-file-sidepanel-controller.md) | Single-file `sidepanel.js` controller instead of split modules | Accepted |
-| [0006](0006-note-library-via-indexeddb.md) | Local note library, stored in IndexedDB, scoped to the panel document | Proposed |
+| [0006](0006-note-library-via-indexeddb.md) | Local note library, stored in IndexedDB, scoped to the panel document | Accepted (decision 2 superseded by 0007) |
+| [0007](0007-autosave-to-library.md) | Note library entries are created automatically on autosave, not only on explicit Save/Save As | Accepted |
