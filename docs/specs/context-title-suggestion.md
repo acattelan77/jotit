@@ -1,11 +1,19 @@
-# Spec: Context / Title Suggestion
+# Spec: Title Auto-fill And Lock
 
 ## Purpose
 
 Save the user from retyping a note title every time — prefill it from the
-page they're on, remember what they've called notes on that site before, and
-let them lock the title so it stops following page navigation once they've
-set it deliberately.
+page they're on, and let them lock the title so it stops following page
+navigation once they've set it deliberately.
+
+**Removed 2026-07-10: per-site "context suggestion."** This spec previously
+also covered a "Use last: `<value>`" suggestion button, remembering the last
+custom title typed on a given hostname (`contextByHost` storage key,
+`#contextSuggestion` UI element) and offering it back next time. Removed at
+the product owner's explicit direction ("that feature is not needed") — see
+[roadmap.md](../plan/roadmap.md). `getCurrentHost()`, the helper it used to
+determine the current hostname, was kept — the library's "this site" filter
+(see [note-library.md](note-library.md)) depends on it independently.
 
 ## Behavior
 
@@ -22,10 +30,6 @@ set it deliberately.
 - **Title lock** is a toggle, persisted across sessions
   (`chrome.storage.local["titleLockEnabled"]`). While locked, page
   navigation never overwrites the title field.
-- **Context suggestions:** when the user sets a custom title on a given
-  hostname, it's remembered (`contextByHost[host] = {value, updatedAt}`) and
-  offered as a suggestion next time they're on that host. Capped at 100
-  entries — oldest (`updatedAt`) evicted first when exceeded.
 
 ## Edge cases to preserve
 
@@ -36,9 +40,3 @@ set it deliberately.
 - Auto-fill must not fire after the note body has content and the title is
   already non-empty. This preserves the research workflow where one note
   accumulates excerpts from multiple tabs/articles.
-- Context suggestions are per-hostname, not per-URL — don't change the
-  granularity without considering that most users' mental model here is
-  "this site," not "this exact page."
-- The 100-entry cap and its eviction-by-`updatedAt` behavior exist to bound
-  storage growth over long-term use — preserve some cap if changing this,
-  don't remove it outright.

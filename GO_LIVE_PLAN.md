@@ -40,7 +40,7 @@ privacy disclosures, verified permissions, and a clean release package.
 - [ ] Open the side panel from the toolbar action.
 - [ ] Open the side panel from the extension command.
 - [ ] Confirm title/context autofill from the active page.
-- [ ] Confirm title lock and per-site context suggestion behavior.
+- [ ] Confirm title lock behavior.
 - [ ] Confirm date and time controls.
 - [ ] Confirm editor formatting and Markdown conversion.
 - [ ] Confirm selected page text appears as a pending **Add selection** action
@@ -55,9 +55,16 @@ privacy disclosures, verified permissions, and a clean release package.
 - [ ] Confirm notes with real content are saved to the library automatically,
   with no explicit save action, and that an auto-filled title alone does not
   create an entry.
-- [ ] Confirm the library view: search, reopening a note, per-row Save and
-  Delete, and Export all (both the folder-picker and Downloads-fallback
+- [ ] Confirm the library view: search, sort, "this site" filter, pin,
+  reopening a note, per-row Save and Delete, multi-select bulk delete,
+  import, and Export all (both the folder-picker and Downloads-fallback
   paths).
+- [ ] Confirm pasted plain text inserts as prose, not a code block, and that
+  the toolbar has no Link button (removed to prevent overflow — see
+  roadmap.md) while still fitting cleanly at the real ~380px panel width.
+- [ ] Confirm the global keyboard shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+Shift+S,
+  Cmd/Ctrl+Alt+N, Alt+L, Escape), the per-command toolbar shortcuts (shown
+  on hover), and the first-run onboarding hint.
 - [ ] Confirm the current design system in light and dark mode.
 - [ ] Confirm there are no service-worker or side-panel console errors.
 

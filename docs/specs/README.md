@@ -19,7 +19,7 @@ drift this doc structure exists to prevent (see
 | [rich-text-editor.md](rich-text-editor.md) | Formatting toolbar, keyboard shortcuts, image paste/drop |
 | [page-selection-capture.md](page-selection-capture.md) | Capturing and inserting selected page text |
 | [panel-detach-reattach.md](panel-detach-reattach.md) | Docked ↔ standalone window behavior |
-| [context-title-suggestion.md](context-title-suggestion.md) | Auto-title, title lock, per-host suggestions |
+| [context-title-suggestion.md](context-title-suggestion.md) | Auto-title, title lock |
 | [date-time-picker.md](date-time-picker.md) | Meeting date/time controls |
 | [export-and-save.md](export-and-save.md) | Save, Save As, Markdown/YAML output, attachments |
 | [note-library.md](note-library.md) | Browsing/searching/reopening/bulk-exporting past saved notes |

@@ -27,7 +27,6 @@ const saveAsBtn = document.getElementById("saveAsBtn");
 const toolbar = document.querySelector(".toolbar");
 const editorStack = document.querySelector(".editor-stack");
 const statusMessage = document.getElementById("statusMessage");
-const contextSuggestion = document.getElementById("contextSuggestion");
 const wordCount = document.getElementById("wordCount");
 const characterCount = document.getElementById("characterCount");
 const selectionCapture = document.getElementById("selectionCapture");
@@ -42,6 +41,17 @@ const librarySearchInput = document.getElementById("librarySearch");
 const libraryExportAllBtn = document.getElementById("libraryExportAllBtn");
 const libraryList = document.getElementById("libraryList");
 const libraryEmptyState = document.getElementById("libraryEmptyState");
+const libraryImportBtn = document.getElementById("libraryImportBtn");
+const libraryImportInput = document.getElementById("libraryImportInput");
+const librarySortSelect = document.getElementById("librarySortSelect");
+const libraryFilterSiteBtn = document.getElementById("libraryFilterSiteBtn");
+const libraryMultiSelectBtn = document.getElementById("libraryMultiSelectBtn");
+const libraryBulkBar = document.getElementById("libraryBulkBar");
+const libraryBulkCount = document.getElementById("libraryBulkCount");
+const libraryBulkDeleteBtn = document.getElementById("libraryBulkDeleteBtn");
+const libraryBulkCancelBtn = document.getElementById("libraryBulkCancelBtn");
+const onboardingHint = document.getElementById("onboardingHint");
+const onboardingHintDismiss = document.getElementById("onboardingHintDismiss");
 
 const NoteUtils = window.NoteUtils;
 if (!NoteUtils) {
@@ -66,9 +76,9 @@ const {
   getActiveTab,
 } = NoteUtils;
 
-const CONTEXT_KEY = "contextByHost";
 const DEBUG_KEY = "debugLogsEnabled";
 const TITLE_LOCK_KEY = "titleLockEnabled";
+const ONBOARDING_HINT_KEY = "onboardingHintDismissed";
 const MAX_PASTED_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_EXPORTED_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGES_PER_PASTE = 8;
@@ -115,8 +125,11 @@ let pageHistory = [];
 let currentLibraryEntryId = null;
 let libraryViewOpen = false;
 let libraryEntriesCache = [];
+let librarySortMode = "updated";
+let libraryFilterThisSite = false;
+let libraryMultiSelectMode = false;
+const librarySelectedIds = new Set();
 let debugEnabled = false;
-let contextByHost = {};
 let titleLocked = false;
 const urlParams = new URLSearchParams(window.location.search);
 const isStandalone = urlParams.get("standalone") === "1";
@@ -305,10 +318,6 @@ if (chrome?.storage?.onChanged) {
       updateTitleLockButton();
       storageState.refreshed[TITLE_LOCK_KEY] = true;
     }
-    if (Object.prototype.hasOwnProperty.call(changes, CONTEXT_KEY)) {
-      contextByHost = changes[CONTEXT_KEY].newValue || {};
-      storageState.refreshed[CONTEXT_KEY] = true;
-    }
   });
 }
 
@@ -323,41 +332,6 @@ const getCurrentHost = () => {
   } catch (error) {
     return null;
   }
-};
-
-const updateContextSuggestion = () => {
-  if (!contextSuggestion) return;
-  const host = getCurrentHost();
-  const entry = host ? contextByHost[host] : null;
-  const value = typeof entry?.value === "string" ? entry.value.trim() : "";
-  if (!value) {
-    contextSuggestion.hidden = true;
-    return;
-  }
-  if (meetingNameInput.value.trim() === value) {
-    contextSuggestion.hidden = true;
-    return;
-  }
-  contextSuggestion.textContent = `Use last: ${value}`;
-  contextSuggestion.hidden = false;
-};
-
-const rememberContextForHost = (value) => {
-  const host = getCurrentHost();
-  if (!host) return;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === currentPageTitle) return;
-  contextByHost[host] = { value: trimmed, updatedAt: Date.now() };
-  const entries = Object.entries(contextByHost);
-  if (entries.length > 100) {
-    entries
-      .sort((a, b) => (a[1].updatedAt || 0) - (b[1].updatedAt || 0))
-      .slice(0, entries.length - 100)
-      .forEach(([key]) => delete contextByHost[key]);
-  }
-  storageSet({ [CONTEXT_KEY]: contextByHost }).catch((error) => {
-    console.warn("Couldn't store context suggestions.", error);
-  });
 };
 
 const recordPageVisit = (url, title) => {
@@ -534,7 +508,6 @@ const updateTitleFromActiveTab = async () => {
           }
           currentPageUrl = typeof tab.url === "string" ? tab.url : "";
           recordPageVisit(currentPageUrl, currentPageTitle);
-          updateContextSuggestion();
           debouncedSaveDraft();
           return;
         }
@@ -553,7 +526,6 @@ const updateTitleFromActiveTab = async () => {
         currentPageUrl = sourceUrlParam;
       }
       recordPageVisit(currentPageUrl, currentPageTitle);
-      updateContextSuggestion();
       debouncedSaveDraft();
       return;
     }
@@ -579,7 +551,6 @@ const updateTitleFromActiveTab = async () => {
     lastAutoTabUrl = tabUrl;
     currentPageUrl = tabUrl;
     recordPageVisit(currentPageUrl, currentPageTitle);
-    updateContextSuggestion();
     didUpdate = true;
   }
   if (didUpdate) {
@@ -674,30 +645,48 @@ const insertBlockElement = (range, blockEl) => {
   parent.remove();
 };
 
-// Text pasted from elsewhere (typically a webpage, given this app's job) is
-// wrapped in a code block by default, since that's usually a snippet/quote
-// worth visually setting apart rather than blending into normal prose. If
-// the caret is already inside a code block, the paste just extends that
-// block's text instead of nesting a new one.
-const insertPastedTextAsCodeBlock = (text) => {
+// Plain-text paste inserts as ordinary prose (text + <br> per line), matching
+// what every other notes/document editor does by default. Earlier versions
+// of this app wrapped every paste in a code block on the theory that pasted
+// text is usually a snippet copied from the page being read — in practice
+// that made pasting an agenda, a paragraph to annotate, or any other normal
+// prose look broken (unexpectedly monospaced) the first time a user did it,
+// with no visible explanation or way to opt out. Captured page selections
+// (see insertSelectionWithLink) still go into a code block — that's a
+// deliberate "quoted external source, with a link back to it" affordance,
+// not a generic paste default, so it's unaffected by this change. See
+// docs/specs/rich-text-editor.md.
+const insertPastedTextAsPlainText = (text) => {
   const selection = ensureSelectionInNotes();
   if (!selection || selection.rangeCount === 0) return;
   const normalized = text.replace(/\r\n?/g, "\n");
   const range = selection.getRangeAt(0);
   range.deleteContents();
-  const pre = document.createElement("pre");
-  const code = document.createElement("code");
-  code.textContent = normalized;
-  pre.appendChild(code);
-  insertBlockElement(range, pre);
-  if (!pre.nextSibling) {
-    pre.parentNode?.insertBefore(document.createElement("p"), null);
-  }
+  const lines = normalized.split("\n");
+  const fragment = document.createDocumentFragment();
+  let lastNode = null;
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      fragment.appendChild(document.createElement("br"));
+    }
+    if (line) {
+      lastNode = document.createTextNode(line);
+      fragment.appendChild(lastNode);
+    }
+  });
+  if (!fragment.childNodes.length) return;
+  range.insertNode(fragment);
   const caretRange = document.createRange();
-  caretRange.selectNodeContents(code);
-  caretRange.collapse(false);
+  if (lastNode) {
+    caretRange.setStartAfter(lastNode);
+  } else {
+    caretRange.selectNodeContents(notesInput);
+    caretRange.collapse(false);
+  }
+  caretRange.collapse(true);
   selection.removeAllRanges();
   selection.addRange(caretRange);
+  lastNotesRange = caretRange.cloneRange();
 };
 
 const applyFormat = (format) => {
@@ -841,22 +830,23 @@ const applyFormat = (format) => {
       }
       break;
     }
-    case "link":
+    case "timestamp": {
       if (!selection || selection.rangeCount === 0) return;
-      const linkRange = selection.getRangeAt(0);
-      const linkText = linkRange.toString() || "link";
-      const url = normalizeUrl(prompt("Enter URL:", "https://"));
-      if (url) {
-        const a = document.createElement("a");
-        a.href = url;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.title = `${url} — ⌘/Ctrl+Click to open`;
-        a.textContent = linkText;
-        linkRange.deleteContents();
-        linkRange.insertNode(a);
-      }
+      const stampRange = selection.getRangeAt(0);
+      const now = new Date();
+      const stampNode = document.createTextNode(
+        `${pad2(now.getHours())}:${pad2(now.getMinutes())} — `
+      );
+      stampRange.deleteContents();
+      stampRange.insertNode(stampNode);
+      const caretRange = document.createRange();
+      caretRange.setStartAfter(stampNode);
+      caretRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(caretRange);
+      lastNotesRange = caretRange.cloneRange();
       break;
+    }
   }
 
   updateEditorStats();
@@ -1301,7 +1291,6 @@ const saveDraft = async () => {
 };
 
 const debouncedSaveDraft = debounce(saveDraft, 300);
-const debouncedRememberContext = debounce(rememberContextForHost, 600);
 
 const resetEditorFormatting = () => {
   notesInput.focus();
@@ -1557,12 +1546,104 @@ const deleteLibraryEntryPrompt = async (entry) => {
   }
 };
 
+// Pinned entries always sort first regardless of the chosen sort mode;
+// within each group (pinned / not pinned), "updated" reuses the
+// already-reverse-chronological order NoteLibrary.listEntries() returns
+// (an IndexedDB cursor on the updatedAt index), "created"/"title" re-sort
+// client-side over the already-loaded cache — the library is expected to
+// stay at a personal-notes scale, not a scale where this matters.
+const sortLibraryEntries = (entries, mode) => {
+  const copy = [...entries];
+  if (mode === "created") {
+    copy.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  } else if (mode === "title") {
+    copy.sort((a, b) =>
+      (a.title || "").localeCompare(b.title || "", undefined, {
+        sensitivity: "base",
+      })
+    );
+  }
+  return copy;
+};
+
+const entryMatchesCurrentSite = (entry, host) => {
+  if (!host) return false;
+  return (entry.pageHistory || []).some((page) => {
+    try {
+      return new URL(page.url).hostname === host;
+    } catch (error) {
+      return false;
+    }
+  });
+};
+
+const updateLibraryBulkBar = () => {
+  if (!libraryBulkBar) return;
+  libraryBulkBar.hidden = !libraryMultiSelectMode;
+  const count = librarySelectedIds.size;
+  if (libraryBulkCount) {
+    libraryBulkCount.textContent = `${pluralize(count, "note")} selected`;
+  }
+  if (libraryBulkDeleteBtn) {
+    libraryBulkDeleteBtn.disabled = count === 0;
+  }
+};
+
+const exitLibraryMultiSelectMode = () => {
+  libraryMultiSelectMode = false;
+  librarySelectedIds.clear();
+  libraryMultiSelectBtn?.classList.remove("active");
+  libraryMultiSelectBtn?.setAttribute("aria-pressed", "false");
+  updateLibraryBulkBar();
+  renderLibraryList(librarySearchInput?.value || "");
+};
+
+// Pin/unpin never touches updatedAt/createdAt — it's a display-order
+// preference, not an edit to the note itself, so it shouldn't bump a note
+// to the top of "recently updated" or count as a real change.
+const toggleLibraryEntryPinned = async (entry) => {
+  try {
+    await NoteLibrary.putEntry({ ...entry, pinned: !entry.pinned });
+    await loadLibraryList();
+  } catch (error) {
+    reportError("Couldn't update that note.", error);
+  }
+};
+
+const deleteSelectedLibraryEntries = async () => {
+  const ids = Array.from(librarySelectedIds);
+  if (!ids.length) return;
+  const confirmed = window.confirm(
+    `Remove ${pluralize(ids.length, "note")} from the library? This only removes them from Jot it! — it does not delete or affect any exported .md files already on disk.`
+  );
+  if (!confirmed) return;
+  try {
+    for (const id of ids) {
+      await NoteLibrary.deleteEntry(id);
+      if (currentLibraryEntryId === id) currentLibraryEntryId = null;
+    }
+    showToast(`Deleted ${pluralize(ids.length, "note")}`, { timeoutMs: 1800 });
+  } catch (error) {
+    reportError("Couldn't remove some notes from the library.", error);
+  } finally {
+    exitLibraryMultiSelectMode();
+    await loadLibraryList();
+  }
+};
+
 const renderLibraryList = (searchTerm) => {
   if (!libraryList) return;
   const term = (searchTerm || "").trim().toLowerCase();
+  const currentHost = getCurrentHost();
+
+  let base = libraryEntriesCache;
+  if (libraryFilterThisSite) {
+    base = base.filter((entry) => entryMatchesCurrentSite(entry, currentHost));
+  }
+
   const filtered = !term
-    ? libraryEntriesCache
-    : libraryEntriesCache.filter((entry) => {
+    ? base
+    : base.filter((entry) => {
         const haystack = [
           entry.title || "",
           entry.notes || "",
@@ -1573,25 +1654,74 @@ const renderLibraryList = (searchTerm) => {
         return haystack.includes(term);
       });
 
+  const sorted = sortLibraryEntries(filtered, librarySortMode);
+  const ordered = [
+    ...sorted.filter((entry) => entry.pinned),
+    ...sorted.filter((entry) => !entry.pinned),
+  ];
+
   libraryList.innerHTML = "";
 
   if (libraryEmptyState) {
     if (!libraryEntriesCache.length) {
       libraryEmptyState.hidden = false;
       libraryEmptyState.textContent =
-        "No saved notes yet. Notes you save will show up here.";
-    } else if (!filtered.length) {
+        "No saved notes yet. Every note saves automatically as you type — notes you save will show up here.";
+    } else if (!ordered.length && term) {
       libraryEmptyState.hidden = false;
       libraryEmptyState.textContent = "No notes match your search.";
+    } else if (!ordered.length && libraryFilterThisSite) {
+      libraryEmptyState.hidden = false;
+      libraryEmptyState.textContent = "No saved notes from this site yet.";
     } else {
       libraryEmptyState.hidden = true;
     }
   }
 
-  filtered.forEach((entry) => {
+  ordered.forEach((entry) => {
     const row = document.createElement("div");
     row.className = "library-row";
+    if (entry.pinned) row.classList.add("is-pinned");
     row.dataset.id = entry.id;
+
+    if (libraryMultiSelectMode) {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "library-row__checkbox";
+      checkbox.checked = librarySelectedIds.has(entry.id);
+      checkbox.setAttribute(
+        "aria-label",
+        `Select "${entry.title || "Untitled note"}"`
+      );
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) {
+          librarySelectedIds.add(entry.id);
+        } else {
+          librarySelectedIds.delete(entry.id);
+        }
+        updateLibraryBulkBar();
+      });
+      row.appendChild(checkbox);
+    } else {
+      const pin = document.createElement("button");
+      pin.type = "button";
+      pin.className = "library-row__pin";
+      pin.classList.toggle("is-pinned", Boolean(entry.pinned));
+      pin.setAttribute("aria-pressed", String(Boolean(entry.pinned)));
+      const pinLabel = entry.pinned ? "Unpin note" : "Pin note";
+      pin.setAttribute("aria-label", pinLabel);
+      pin.title = pinLabel;
+      pin.innerHTML =
+        '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+        '<path d="M12 17v5" />' +
+        '<path d="M9 3h6l1 5 3 2-1 3H6l-1-3 3-2z" />' +
+        "</svg>";
+      pin.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleLibraryEntryPinned(entry);
+      });
+      row.appendChild(pin);
+    }
 
     const open = document.createElement("button");
     open.type = "button";
@@ -1610,42 +1740,56 @@ const renderLibraryList = (searchTerm) => {
     snippetEl.textContent = noteSnippet(entry.notes);
 
     open.append(titleEl, dateEl, snippetEl);
-    open.addEventListener("click", () => openLibraryEntry(entry.id));
-
-    const save = document.createElement("button");
-    save.type = "button";
-    save.className = "library-row__save";
-    save.setAttribute("aria-label", "Save .md");
-    save.title = "Save .md";
-    save.innerHTML =
-      '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
-      '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />' +
-      '<polyline points="7 10 12 15 17 10" />' +
-      '<line x1="12" y1="15" x2="12" y2="3" />' +
-      "</svg>";
-    save.addEventListener("click", (event) => {
-      event.stopPropagation();
-      exportLibraryEntry(entry);
+    open.addEventListener("click", () => {
+      if (libraryMultiSelectMode) {
+        const checkbox = row.querySelector(".library-row__checkbox");
+        if (checkbox) {
+          checkbox.checked = !checkbox.checked;
+          checkbox.dispatchEvent(new Event("change"));
+        }
+        return;
+      }
+      openLibraryEntry(entry.id);
     });
+    row.appendChild(open);
 
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "library-row__delete";
-    del.setAttribute("aria-label", "Remove from library");
-    del.title = "Remove from library (does not delete the exported file)";
-    del.innerHTML =
-      '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
-      '<polyline points="4 7 20 7" />' +
-      '<path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />' +
-      '<line x1="10" y1="11" x2="10" y2="17" />' +
-      '<line x1="14" y1="11" x2="14" y2="17" />' +
-      "</svg>";
-    del.addEventListener("click", (event) => {
-      event.stopPropagation();
-      deleteLibraryEntryPrompt(entry);
-    });
+    if (!libraryMultiSelectMode) {
+      const save = document.createElement("button");
+      save.type = "button";
+      save.className = "library-row__save";
+      save.setAttribute("aria-label", "Save .md");
+      save.title = "Save .md";
+      save.innerHTML =
+        '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />' +
+        '<polyline points="7 10 12 15 17 10" />' +
+        '<line x1="12" y1="15" x2="12" y2="3" />' +
+        "</svg>";
+      save.addEventListener("click", (event) => {
+        event.stopPropagation();
+        exportLibraryEntry(entry);
+      });
+      row.appendChild(save);
 
-    row.append(open, save, del);
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "library-row__delete";
+      del.setAttribute("aria-label", "Remove from library");
+      del.title = "Remove from library (does not delete the exported file)";
+      del.innerHTML =
+        '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+        '<polyline points="4 7 20 7" />' +
+        '<path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />' +
+        '<line x1="10" y1="11" x2="10" y2="17" />' +
+        '<line x1="14" y1="11" x2="14" y2="17" />' +
+        "</svg>";
+      del.addEventListener("click", (event) => {
+        event.stopPropagation();
+        deleteLibraryEntryPrompt(entry);
+      });
+      row.appendChild(del);
+    }
+
     libraryList.appendChild(row);
   });
 };
@@ -1659,6 +1803,7 @@ const loadLibraryList = async () => {
     libraryEntriesCache = [];
   }
   renderLibraryList(librarySearchInput?.value || "");
+  updateLibraryBulkBar();
 };
 
 const setLibraryViewOpen = (open) => {
@@ -1668,6 +1813,9 @@ const setLibraryViewOpen = (open) => {
   if (notesSection) notesSection.hidden = open;
   libraryToggleBtn?.classList.toggle("active", open);
   libraryToggleBtn?.setAttribute("aria-pressed", String(open));
+  if (!open && libraryMultiSelectMode) {
+    exitLibraryMultiSelectMode();
+  }
   if (open) {
     loadLibraryList();
     librarySearchInput?.focus();
@@ -1741,6 +1889,119 @@ const exportLibraryEntry = async (entry) => {
     window.alert("Save failed. Please try again.");
   } finally {
     pageHistory = originalPageHistory;
+  }
+};
+
+// Reverses toYamlString (JSON.stringify) for the frontmatter scalars this
+// app itself writes — not a general YAML parser, see toYamlString's own
+// comment in buildYamlFrontmatter. Falls back to the raw trimmed string if
+// JSON.parse fails, so a hand-edited file with an unquoted value still
+// imports something reasonable instead of throwing.
+const parseYamlScalarString = (raw) => {
+  const trimmed = (raw || "").trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch (error) {
+    return trimmed.replace(/^"|"$/g, "");
+  }
+};
+
+// Reads back a file this app exported (buildMarkdown/buildYamlFrontmatter) —
+// deliberately scoped to round-tripping Jot it!'s own export format, not
+// arbitrary Markdown/frontmatter from other tools. Returns null if the file
+// doesn't start with a "---" frontmatter block at all; anything narrower
+// than that (a missing field, an unexpected pages_visited shape) degrades
+// gracefully field-by-field rather than rejecting the whole import, since a
+// partially-recovered note is more useful than none.
+const parseImportedNote = (text) => {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text || "");
+  if (!match) return null;
+  const [, frontmatter, rest] = match;
+  const lines = frontmatter.split(/\r?\n/);
+  let title = "";
+  let date = "";
+  let time = "";
+  const pageHistory = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const titleMatch = /^title:\s*(.+)$/.exec(line);
+    if (titleMatch) {
+      title = parseYamlScalarString(titleMatch[1]);
+      continue;
+    }
+    const dateMatch = /^date:\s*(.+)$/.exec(line);
+    if (dateMatch) {
+      date = dateMatch[1].trim();
+      continue;
+    }
+    const timeMatch = /^time:\s*(.+)$/.exec(line);
+    if (timeMatch) {
+      time = parseYamlScalarString(timeMatch[1]);
+      continue;
+    }
+    if (/^pages_visited:\s*$/.test(line)) {
+      let j = i + 1;
+      while (j < lines.length && /^\s*-\s+/.test(lines[j])) {
+        const itemMatch = /^\s*-\s+(.+)$/.exec(lines[j]);
+        if (itemMatch) {
+          const linkString = parseYamlScalarString(itemMatch[1]);
+          const linkMatch = /^\[([^\]]*)\]\(([^)]*)\)$/.exec(linkString);
+          if (linkMatch) {
+            pageHistory.push({
+              title: linkMatch[1] || linkMatch[2],
+              url: linkMatch[2],
+              visitedAt: Date.now(),
+            });
+          }
+        }
+        j += 1;
+      }
+      i = j - 1;
+    }
+  }
+
+  const meetingDate =
+    date && time ? `${date}T${time}` : toLocalDateTimeValue();
+  let body = (rest || "").replace(/^\r?\n+/, "");
+  const headingMatch = /^#[^\n]*\r?\n\r?\n?/.exec(body);
+  if (headingMatch) {
+    body = body.slice(headingMatch[0].length);
+  }
+
+  return {
+    title: title || "Imported note",
+    meetingDate,
+    notes: body.trim(),
+    pageHistory,
+  };
+};
+
+const importLibraryEntryFromFile = async (file) => {
+  try {
+    const text = await file.text();
+    const parsed = parseImportedNote(text);
+    if (!parsed) {
+      reportError(
+        "That file doesn't look like a Jot it! export.",
+        new Error("no frontmatter block found")
+      );
+      return;
+    }
+    const now = Date.now();
+    await NoteLibrary.putEntry({
+      id: NoteLibrary.generateId(),
+      title: sanitizeMeetingName(parsed.title),
+      meetingDate: parsed.meetingDate,
+      notes: parsed.notes,
+      pageHistory: normalizePageHistory(parsed.pageHistory),
+      createdAt: now,
+      updatedAt: now,
+    });
+    showToast("Note imported.", { timeoutMs: 1800 });
+    await loadLibraryList();
+  } catch (error) {
+    reportError("Couldn't import that file.", error);
   }
 };
 
@@ -2040,8 +2301,6 @@ const handleMeetingNameInput = () => {
   userEditedTitle = value !== "" && value !== lastAutoTitle;
   setTitleLocked(true);
   debouncedSaveDraft();
-  debouncedRememberContext(value);
-  updateContextSuggestion();
 };
 
 const storeNotesSelection = () => {
@@ -2074,10 +2333,11 @@ const insertSelectionWithLink = (text, url) => {
   const normalizedUrl = normalizeUrl(url);
   notesInput.focus();
 
-  // Selected page text is a snippet/quote, same as a clipboard paste — see
-  // insertPastedTextAsCodeBlock — so it goes in a code block too, with the
-  // clickable source link as its own paragraph directly below the block
-  // rather than inline with the text.
+  // A captured page selection is a quoted external source with a link back
+  // to it, not generic prose — deliberately still goes in a code block (see
+  // insertPastedTextAsPlainText's comment for why a generic clipboard paste
+  // no longer does), with the clickable source link as its own paragraph
+  // directly below the block rather than inline with the text.
   const pre = document.createElement("pre");
   const code = document.createElement("code");
   code.textContent = text.replace(/\r\n?/g, "\n");
@@ -2287,14 +2547,14 @@ const init = async () => {
   try {
     const result = await storageGetMultiple([
       STORAGE_KEY,
-      CONTEXT_KEY,
       TITLE_LOCK_KEY,
+      ONBOARDING_HINT_KEY,
     ]);
-    if (result[CONTEXT_KEY] && !storageState.refreshed[CONTEXT_KEY]) {
-      contextByHost = result[CONTEXT_KEY] || {};
-    }
     if (Object.prototype.hasOwnProperty.call(result, TITLE_LOCK_KEY) && !storageState.refreshed[TITLE_LOCK_KEY]) {
       titleLocked = Boolean(result[TITLE_LOCK_KEY]);
+    }
+    if (onboardingHint && !result[ONBOARDING_HINT_KEY]) {
+      onboardingHint.hidden = false;
     }
     if (result && result[STORAGE_KEY]) {
       draft = result[STORAGE_KEY];
@@ -2331,7 +2591,6 @@ const init = async () => {
   }
   updateToolbarState();
   updateEditorStats();
-  updateContextSuggestion();
   syncPanelOpenState();
   // Covers the migration gap for a draft that already had real body
   // content before this feature existed (or one the user never touches
@@ -2358,17 +2617,6 @@ titleLockButton?.addEventListener("click", () => {
 });
 
 meetingNameInput.addEventListener("input", handleMeetingNameInput);
-contextSuggestion?.addEventListener("click", () => {
-  const host = getCurrentHost();
-  const entry = host ? contextByHost[host] : null;
-  const value = typeof entry?.value === "string" ? entry.value.trim() : "";
-  if (!value) return;
-  meetingNameInput.value = value;
-  userEditedTitle = true;
-  setTitleLocked(true);
-  debouncedSaveDraft();
-  updateContextSuggestion();
-});
 addSelectionBtn?.addEventListener("click", addPendingPageSelection);
 dismissSelectionBtn?.addEventListener("click", clearPendingPageSelection);
 notesInput.addEventListener("click", (event) => {
@@ -2411,7 +2659,7 @@ notesInput.addEventListener("paste", (event) => {
   if (pastingIntoExistingCodeBlock) {
     document.execCommand("insertText", false, text);
   } else {
-    insertPastedTextAsCodeBlock(text);
+    insertPastedTextAsPlainText(text);
     storeNotesSelection();
     updateEditorStats();
     debouncedSaveDraft();
@@ -2505,9 +2753,41 @@ document.addEventListener("click", (event) => {
   closeDatePicker();
 });
 
+// Global app shortcuts. Alt+<letter> combos deliberately avoid E/`/I/N/U —
+// on macOS, plain Option+{E,`,I,N,U} are reserved dead keys for typing
+// accented characters (é, è, î, ñ, ü); intercepting them here would break
+// accent input for anyone typing in a language that uses them. Cmd/Ctrl+Alt
+// combos aren't affected (dead-key composition only triggers on a lone
+// Option press), so New note uses that instead of a plain Alt+N.
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && pickerOpen) {
-    closeDatePicker();
+  if (event.key === "Escape") {
+    if (libraryViewOpen) {
+      setLibraryViewOpen(false);
+      return;
+    }
+    if (pickerOpen) {
+      closeDatePicker();
+    }
+    return;
+  }
+  const key = event.key.toLowerCase();
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && key === "s") {
+    event.preventDefault();
+    if (event.shiftKey) {
+      handleSaveAs();
+    } else {
+      handleSave();
+    }
+    return;
+  }
+  if ((event.metaKey || event.ctrlKey) && event.altKey && key === "n") {
+    event.preventDefault();
+    handleClear();
+    return;
+  }
+  if (event.altKey && !event.metaKey && !event.ctrlKey && key === "l") {
+    event.preventDefault();
+    setLibraryViewOpen(!libraryViewOpen);
   }
 });
 
@@ -2532,6 +2812,36 @@ librarySearchInput?.addEventListener("input", () => {
   renderLibraryList(librarySearchInput.value);
 });
 libraryExportAllBtn?.addEventListener("click", exportAllNotes);
+libraryImportBtn?.addEventListener("click", () => libraryImportInput?.click());
+libraryImportInput?.addEventListener("change", () => {
+  const file = libraryImportInput.files?.[0];
+  libraryImportInput.value = "";
+  if (file) importLibraryEntryFromFile(file);
+});
+librarySortSelect?.addEventListener("change", () => {
+  librarySortMode = librarySortSelect.value;
+  renderLibraryList(librarySearchInput?.value || "");
+});
+libraryFilterSiteBtn?.addEventListener("click", () => {
+  libraryFilterThisSite = !libraryFilterThisSite;
+  libraryFilterSiteBtn.classList.toggle("active", libraryFilterThisSite);
+  libraryFilterSiteBtn.setAttribute("aria-pressed", String(libraryFilterThisSite));
+  renderLibraryList(librarySearchInput?.value || "");
+});
+libraryMultiSelectBtn?.addEventListener("click", () => {
+  libraryMultiSelectMode = !libraryMultiSelectMode;
+  librarySelectedIds.clear();
+  libraryMultiSelectBtn.classList.toggle("active", libraryMultiSelectMode);
+  libraryMultiSelectBtn.setAttribute("aria-pressed", String(libraryMultiSelectMode));
+  updateLibraryBulkBar();
+  renderLibraryList(librarySearchInput?.value || "");
+});
+libraryBulkCancelBtn?.addEventListener("click", exitLibraryMultiSelectMode);
+libraryBulkDeleteBtn?.addEventListener("click", deleteSelectedLibraryEntries);
+onboardingHintDismiss?.addEventListener("click", () => {
+  if (onboardingHint) onboardingHint.hidden = true;
+  storageSet({ [ONBOARDING_HINT_KEY]: true }).catch(() => {});
+});
 openWindowButton?.addEventListener("click", async () => {
   const tab = await getActiveTab();
   const tabId = Number.isInteger(panelTabId) ? panelTabId : tab?.id;
@@ -2618,14 +2928,49 @@ window.JotDebug = {
   },
 };
 
+// Toolbar-command shortcuts. Digit- and semicolon-based combos check
+// e.code (physical key position) rather than e.key, because a Shift+digit
+// KeyboardEvent's `key` is the shifted character ("*" for Shift+8, not
+// "8"), which is also layout-dependent — `code` avoids both problems.
+// Cmd/Ctrl+Shift+8 / +7 deliberately match Google Docs' bullet/numbered
+// list shortcuts.
 notesInput.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && !e.shiftKey && e.key === "b") {
     e.preventDefault();
     applyFormat("bold");
   }
-  if ((e.metaKey || e.ctrlKey) && e.key === "i") {
+  if (mod && !e.shiftKey && e.key === "i") {
     e.preventDefault();
     applyFormat("italic");
+  }
+  if (mod && !e.shiftKey && e.key.toLowerCase() === "e") {
+    e.preventDefault();
+    applyFormat("code");
+  }
+  if (mod && e.shiftKey && e.key.toLowerCase() === "h") {
+    e.preventDefault();
+    applyFormat("heading");
+  }
+  if (mod && e.shiftKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    applyFormat("codeblock");
+  }
+  if (mod && e.shiftKey && e.code === "Digit8") {
+    e.preventDefault();
+    applyFormat("ul");
+  }
+  if (mod && e.shiftKey && e.code === "Digit7") {
+    e.preventDefault();
+    applyFormat("ol");
+  }
+  if (mod && e.shiftKey && e.code === "Digit9") {
+    e.preventDefault();
+    applyFormat("highlight");
+  }
+  if (mod && e.shiftKey && e.code === "Semicolon") {
+    e.preventDefault();
+    applyFormat("timestamp");
   }
   if (e.key === "Enter") {
     const selection = window.getSelection();

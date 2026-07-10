@@ -107,12 +107,72 @@ Blobs" deviation note for why that turned out to be unnecessary complexity.
 - Editing and re-saving a note opened this way updates its existing library
   entry (see above), not a new one.
 
+### Pinning
+
+- Any entry can be pinned (`toggleLibraryEntryPinned`, a star/pin icon on
+  each row, replaced by a checkbox in multi-select mode — see below).
+  Pinned entries always render first, ahead of every sort mode described
+  below; within the pinned group and the unpinned group separately, the
+  active sort mode still applies.
+- Pinning/unpinning does **not** change the note's `updatedAt` — it's a
+  display-order preference, not an edit. See
+  [architecture.md](../architecture.md#note-library-indexeddb).
+
+### Sorting and filtering
+
+- A sort control (`#librarySortSelect`) offers three orders: Recently
+  updated (the default — the same reverse-chronological order the
+  IndexedDB cursor already returns), Recently created (`createdAt`, no
+  schema change needed since it was already stored), and Title A–Z. Sorting
+  happens client-side over the already-loaded cache, same reasoning as
+  substring search (personal-notes scale, not corpus scale).
+- A "This site" filter chip narrows the list to entries whose `pageHistory`
+  contains a visited page on the same hostname as the currently active tab
+  — reuses `getCurrentHost()`, the same helper the context-suggestion
+  feature already relies on. Combines with search and sort; does not
+  override pinning order.
+
+### Multi-select and bulk delete
+
+- A "Select" toggle (`#libraryMultiSelectBtn`) switches every row from its
+  normal pin/Save/Delete controls to a checkbox, and shows a bulk-action bar
+  with a live selected-count and Delete/Cancel. Deleting is one
+  `window.confirm` for the whole batch (same "this only removes it from
+  Jot it!, not any exported file" wording as the single-entry delete), not
+  one confirm per note — the single-entry flow already existed and was
+  fine at 5-10 notes; bulk delete exists specifically for cleaning up a
+  much larger library in one pass. Exiting multi-select mode (Cancel,
+  closing the library view, or finishing a bulk delete) always clears the
+  selection — there's no "remember my selection" behavior.
+
+### Import
+
+- `#libraryImportBtn` opens a file picker (a hidden `<input type="file"
+  accept=".md,text/markdown">`, triggered programmatically); the chosen
+  file is parsed (`parseImportedNote`) and inserted as a brand-new library
+  entry with a fresh id, `createdAt`/`updatedAt` set to import time.
+- **Deliberately scoped to round-tripping Jot it!'s own export format** —
+  the YAML frontmatter (`title`/`date`/`time`/`pages_visited`) and the
+  `# <title>\n\n<body>` structure `buildMarkdown` produces — not a general
+  Markdown or frontmatter importer. A file that doesn't start with a `---`
+  frontmatter block is rejected with an error toast; a file that does but
+  is missing an individual field degrades gracefully (falls back to
+  reasonable defaults) rather than rejecting the whole import, since a
+  partially-recovered note is more useful than none.
+- Exists specifically to de-risk the "local-first, no cloud backup" trade-off
+  the rest of this feature accepts: the library normally only grows via
+  autosave and only shrinks via explicit delete or browser storage
+  eviction/uninstall — import is the one path back in, for a user who
+  cleared storage, switched machines, or is consolidating notes they'd
+  already exported before this feature existed.
+
 ### Deleting
 
-- The user can remove an entry from the library. This only removes the
-  in-app index entry — it does **not** touch (and cannot touch) the already
-  -exported file sitting on disk. Make this distinction clear in the UI
-  copy so users don't think "delete" destroys their exported file.
+- The user can remove an entry from the library, individually or in bulk
+  (see above). This only removes the in-app index entry — it does **not**
+  touch (and cannot touch) the already-exported file sitting on disk. Make
+  this distinction clear in the UI copy so users don't think "delete"
+  destroys their exported file.
 
 ### Export all (bulk export)
 

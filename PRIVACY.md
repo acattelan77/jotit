@@ -19,8 +19,7 @@ data to any server. It does not use analytics, ads, or tracking.
   after you click **Add selection**; otherwise selection messages are dropped.
 - Images you explicitly paste into the editor, including supported copied web
   image URLs and local clipboard image data.
-- Local preferences such as title lock, debug logging, and recent context
-  suggestions for a site.
+- Local preferences such as title lock and debug logging.
 - A library of every note you've written with real content, saved
   automatically as you type so you can browse, search, reopen, export, or
   delete it later.
@@ -28,8 +27,7 @@ data to any server. It does not use analytics, ads, or tracking.
 ## Where Data Is Stored
 
 - Draft notes are stored in `chrome.storage.local` on your device.
-- Preferences and per-site context suggestions are stored in
-  `chrome.storage.local`.
+- Preferences are stored in `chrome.storage.local`.
 - The note library is stored in IndexedDB on your device, in a database local
   to the extension. It is never sent anywhere; nothing about it leaves your
   browser.
@@ -68,8 +66,6 @@ user-initiated export.
   Deleting a library entry only removes it from the extension's index — it
   does not affect any copy of that note already exported to disk.
 - Exported Markdown files and image attachments remain wherever you save them.
-- Recent context suggestions remain in local Chrome storage and are capped to a
-  limited set of site entries.
 
 ## Contact
 

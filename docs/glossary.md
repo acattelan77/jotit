@@ -26,10 +26,11 @@ each doc/spec coin its own term for it.
   the browser-window chrome.
 - **Context / context title** — the auto-filled note title, normally derived
   from the active tab's page title, editable and optionally lockable
-  (**title lock**) so it stops following page navigation.
-- **Context suggestion** — a remembered custom title value per hostname
-  (`contextByHost` storage key), offered back to the user next time they're
-  on that host.
+  (**title lock**) so it stops following page navigation. A related
+  per-hostname "remember my last custom title on this site" suggestion
+  feature (`contextByHost`) existed briefly and was removed 2026-07-10 at
+  the product owner's direction — see
+  [context-title-suggestion.md](specs/context-title-suggestion.md).
 - **Page selection candidate** — text the user selected on a web page,
   captured by the content script and offered to the panel as a
   not-yet-inserted suggestion (**pending page selection**). Requires an
@@ -75,12 +76,16 @@ correct them here rather than leaving them stale.
 | Caret/selection persistence | `getCaretOffset`, `restoreCaretOffset`, `ensureSelectionInNotes`, `storeNotesSelection`, `getInsertRange` — needed because the contenteditable loses selection on blur/re-render |
 | Title auto-fill from active tab | `shouldAutoUpdateTitle`, `updateTitleFromActiveTab` — branches on standalone vs docked |
 | Panel-open state sync with background | `announcePanelOpen`, `setPanelTabId`, `syncPanelOpenState` |
-| Rich-text formatting / toolbar | `applyFormat` (bold/italic/heading/lists/code/codeblock/highlight/link via `execCommand` + manual DOM surgery), `insertBlockElement` (shared block-insertion/parent-splitting helper used by heading and codeblock), `updateToolbarState`, keyboard shortcuts, Enter-in-code-block handling (in the `notesInput` keydown listener) |
+| Rich-text formatting / toolbar | `applyFormat` (bold/italic/heading/lists/code/codeblock/highlight/timestamp via `execCommand` + manual DOM surgery), `insertBlockElement` (shared block-insertion/parent-splitting helper used by heading and codeblock), `updateToolbarState`, per-command keyboard shortcuts (in the `notesInput` keydown listener, alongside Enter-in-code-block handling) — no toolbar Link button as of 2026-07-10, see [rich-text-editor.md](specs/rich-text-editor.md#links) |
+| Paste handling | `insertPastedTextAsPlainText` (plain-text paste inserts as ordinary prose — text + `<br>` per line — not a code block; see [rich-text-editor.md](specs/rich-text-editor.md)), wired into the `notesInput` `paste` listener alongside the pre-existing image-paste branches |
 | Word/char stats | `countWords` (uses `Intl.Segmenter` if available), `updateEditorStats` |
 | Image handling (paste/drop/insert) | Local duplicates of note-utils image constants/helpers, `readFileAsDataUrl`, `dataUrlToBlob`, `createRemoteImagePlaceholder`, `insertImageIntoEditor`, `buildObsidianImageExport` |
 | Markdown/YAML export construction | `toYamlString`, `buildYamlFrontmatter`, `buildMarkdown`, `getFormData`/`getDraftData` |
 | Draft persistence | `setFormData`, `saveDraft` (also syncs the note library — see below), `debouncedSaveDraft`, `resetEditorFormatting` |
-| Note library | `saveNoteToLibrary` (called from `saveDraft`/`init`/`flushLibrarySync`, never from `handleSave`/`handleSaveAs` — see [ADR-0007](decisions/0007-autosave-to-library.md)), `hasRealNoteContent`, `flushLibrarySync`, `openLibraryEntry`, `deleteLibraryEntryPrompt`, `renderLibraryList`, `loadLibraryList`, `setLibraryViewOpen`, `exportAllNotes`, `noteSnippet` — talks to `window.NoteLibrary` (`note-library.js`), see [architecture.md](architecture.md#note-library-indexeddb) |
+| Note library | `saveNoteToLibrary` (called from `saveDraft`/`init`/`flushLibrarySync`, never from `handleSave`/`handleSaveAs` — see [ADR-0007](decisions/0007-autosave-to-library.md)), `hasRealNoteContent`, `flushLibrarySync`, `openLibraryEntry`, `deleteLibraryEntryPrompt`, `toggleLibraryEntryPinned`, `sortLibraryEntries`, `entryMatchesCurrentSite`, `renderLibraryList`, `loadLibraryList`, `setLibraryViewOpen`, `exportAllNotes`, `exportLibraryEntry`, `noteSnippet` — talks to `window.NoteLibrary` (`note-library.js`), see [architecture.md](architecture.md#note-library-indexeddb) |
+| Library multi-select / bulk delete | `exitLibraryMultiSelectMode`, `updateLibraryBulkBar`, `deleteSelectedLibraryEntries` — `libraryMultiSelectMode`/`librarySelectedIds` module state, toggled via `#libraryMultiSelectBtn` |
+| Library import | `parseYamlScalarString`, `parseImportedNote`, `importLibraryEntryFromFile` — reads back a file this app itself exported (frontmatter + body) into a new library entry; not a general Markdown/YAML importer, see [note-library.md](specs/note-library.md) |
+| Onboarding hint | A dismissible one-time banner (`#onboardingHint`) explaining autosave-to-library on first open, gated by the `onboardingHintDismissed` storage key — shown/hidden in `init()`, dismissed via `onboardingHintDismiss` |
 | Download / Save / Save As | `downloadMarkdown`, `downloadBlob`, `fetchRemoteAttachmentBlob`, `downloadImageAttachments`, File System Access helpers, `handleSave`, `handleSaveAs`, `handleClear` — `handleSave`/`handleSaveAs` are pure disk-export, no note-library involvement (see [ADR-0007](decisions/0007-autosave-to-library.md)); `handleClear` flushes the current note to the library before clearing |
 | Incoming selection-candidate handling | `onMessage` listener for `PAGE_SELECTION_CANDIDATE`, `addPendingPageSelection`, `insertSelectionWithLink` |
 | Tab-change listeners | `attachTabListeners` — different listener sets for standalone vs docked |

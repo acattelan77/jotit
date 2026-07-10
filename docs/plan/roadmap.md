@@ -118,6 +118,104 @@ delete it (keeps the history legible instead of silently vanishing).
 
 ## Resolved
 
+- **Usability-review fixes: onboarding hint, paste default, keyboard
+  shortcuts, and library pin/sort/filter/multi-select/import** —
+  shipped 2026-07-10, following a structured product usability review (five
+  personas, blockers/quick-wins/feature-gap analysis). All items from that
+  review's blockers and quick-wins sections were implemented, plus the
+  review's higher-ROI feature gaps:
+  - First-run onboarding: a dismissible banner (`#onboardingHint`,
+    `onboardingHintDismissed` storage key) explains autosave-to-library and
+    points at the Library button, shown once until dismissed.
+  - **Paste no longer defaults to a code block** — reverts the
+    2026-07-10 "Paste defaults to code block" entry below for plain-text
+    clipboard paste specifically (`insertPastedTextAsPlainText` replaces
+    `insertPastedTextAsCodeBlock` in the paste listener); ordinary prose
+    was looking broken (unexpectedly monospaced) to first-time users with
+    no explanation. Captured page selections (`insertSelectionWithLink`)
+    are unaffected — that code-block treatment was for a different reason
+    (a quoted external source with a link back to it) and stays. See
+    [rich-text-editor.md](../specs/rich-text-editor.md).
+  - **Native `prompt()` for links briefly replaced** with an in-panel
+    dialog (`#linkDialog`) matching the Material 3 UI — then the toolbar
+    Link button itself was removed a few minutes later the same day, once
+    it became clear in a real browser that a 10-icon toolbar overflowed
+    the panel at its actual width. See the follow-up entry directly below
+    for what actually shipped.
+  - **Global keyboard shortcuts added**: Cmd/Ctrl+S (Save), Cmd/Ctrl+Shift+S
+    (Save As), Cmd/Ctrl+Alt+N (New note — not plain Alt+N, see the macOS
+    dead-key note in architecture.md), Alt+L (Library), Escape (closes
+    the library, then the date picker, in that priority order). See
+    [architecture.md](../architecture.md#global-keyboard-shortcuts).
+  - **Insert-timestamp toolbar button** — plain-text `HH:MM —` at the
+    caret, for the meeting-notetaker persona.
+  - **Library search placeholder/hint** made explicit about what's
+    searched (title, body, visited pages) instead of just "Search saved
+    notes...".
+  - **Library row action buttons enlarged** 28px → 36px (touch-target
+    quick win).
+  - **Pin, sort (recently updated/created, title A–Z), and a "this site"
+    filter** added to the library. See
+    [note-library.md](../specs/note-library.md).
+  - **Multi-select + bulk delete** added to the library (previously
+    one-confirm-per-note only).
+  - **Import a previously-exported `.md` file** back into the library —
+    the one feature gap the review flagged as actually threatening the
+    "local-first, no cloud backup" trade-off, since it's the only way back
+    in after storage eviction/uninstall/machine switch. Deliberately
+    scoped to round-tripping this app's own export format, not a general
+    Markdown importer. See [note-library.md](../specs/note-library.md).
+  - Deliberately **not** built, per the review's own "skip for now" call:
+    a manual dark-mode toggle (already auto-follows
+    `prefers-color-scheme`) and word-count goals/reading time (scope
+    creep away from "quick notes").
+  - Verified in a real browser: plain-text paste renders as prose not
+    code; Cmd+S exports without triggering the browser's own Save Page dialog;
+    Cmd+Alt+N clears the note; Alt+L / Escape open and close the library;
+    pin reorders the list and survives a reload; sort-by-title and the
+    site filter both produce correct results; multi-select bulk-delete
+    removes exactly the selected notes; a round-tripped import (export
+    format → parsed back in) preserves title, date/time, body markdown
+    (including a bold span and a link), and page history exactly; no
+    console errors across the whole pass; all 79 existing unit tests still
+    pass unchanged (none of this touched `lib/note-utils.js`).
+- **Follow-up same-day fixes from direct user feedback on the above** —
+  shipped 2026-07-10, a few minutes after the entry directly above, from
+  the product owner reacting to screenshots of the shipped result rather
+  than from the original usability review:
+  - **Context/title suggestion removed entirely** ("that feature is not
+    needed") — the "Use last: `<value>`" button, `contextByHost` storage
+    key, and every function/listener that maintained it
+    (`updateContextSuggestion`, `rememberContextForHost`,
+    `debouncedRememberContext`) are gone. `getCurrentHost()` was kept — the
+    library's "this site" filter depends on it independently and has no
+    relation to the removed feature. See
+    [context-title-suggestion.md](../specs/context-title-suggestion.md).
+  - **Toolbar Link button removed** ("remove the link icon to leave room
+    for the clock") — the 10-icon toolbar (with the timestamp button added
+    minutes earlier) visibly overflowed the panel at its real width. The
+    entire link-dialog feature from the entry above (`#linkDialog`,
+    `openLinkDialog`/`closeLinkDialog`/`confirmLinkDialog`, its CSS, its
+    Escape-chain entry) was removed as dead code along with the button,
+    rather than left unreachable. There is no toolbar link-insert control
+    anymore — see [rich-text-editor.md](../specs/rich-text-editor.md#links)
+    for what still creates a link (page-selection insertion, or typing
+    literal `[text](url)` Markdown which converts on the next reload).
+  - **A keyboard shortcut for every remaining toolbar command**, shown on
+    hover ("Add shortcut for the commands in the toolbar and show the
+    shortcut on hover over the icons"): Cmd/Ctrl+E (inline code),
+    Cmd/Ctrl+Shift+H (heading), Cmd/Ctrl+Shift+K (code block),
+    Cmd/Ctrl+Shift+8/7 (bullet/numbered list — matching Google Docs),
+    Cmd/Ctrl+Shift+9 (highlight), Cmd/Ctrl+Shift+; (timestamp). Digit- and
+    semicolon-based combos check `event.code` rather than `event.key`
+    (Shift+8's `key` is `"*"`, not `"8"`, and that's layout-dependent) —
+    see [architecture.md](../architecture.md#toolbar-command-keyboard-shortcuts).
+  - Verified in a real browser: the toolbar (9 icons, post-Link-removal)
+    fits with zero horizontal overflow at the real ~380px side-panel
+    width, confirmed both by a forced-width DOM check
+    (`scrollWidth`/`clientWidth`) and a visual zoom screenshot; every new
+    shortcut triggers its formatting action; no console errors; `node
+    --check` on all five JS files passes; all 79 existing tests still pass.
 - **Notes are saved to the library automatically — no explicit Save
   required** — shipped 2026-07-10, same day as the note library itself (see
   the entry directly below), superseding that entry's original "only on

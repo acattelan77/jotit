@@ -14,11 +14,25 @@
 - [ ] Confirm the active page title prefills the context field.
 - [ ] Edit the context title and verify the lock prevents page changes from
   replacing it.
-- [ ] Confirm the "Use last" context suggestion appears for a previously edited
-  site context.
 - [ ] Set the date and time with the date picker.
 - [ ] Use the editor formatting toolbar: bold, italic, heading, bullet list,
-  numbered list, inline code, and link.
+  numbered list, inline code, code block, highlight, and timestamp. Confirm
+  there is no Link button (removed to keep the toolbar from overflowing at
+  the panel's real width).
+- [ ] Hover each toolbar button and confirm the tooltip shows its keyboard
+  shortcut; confirm every shortcut (Cmd/Ctrl+B/I/E, Cmd/Ctrl+Shift+H/K/8/7/9,
+  Cmd/Ctrl+Shift+;) actually triggers that formatting action.
+- [ ] Paste plain multi-line text into the editor and confirm it inserts as
+  normal prose (not a code block); confirm pasting into an existing code
+  block still appends inline.
+- [ ] Confirm the first-run onboarding hint appears once, dismisses
+  permanently, and does not reappear after reloading the panel.
+- [ ] Test each global shortcut: Cmd/Ctrl+S (Save, no native "Save Page As"
+  dialog appears), Cmd/Ctrl+Shift+S (Save As), Cmd/Ctrl+Alt+N (New note),
+  Alt+L (toggle Library), Escape (closes the library, then the date picker,
+  in that priority order).
+- [ ] Confirm the panel toolbar does not overflow or clip any icon at the
+  real side-panel width (~380px), not just at a wide test-window width.
 - [ ] Select text on a webpage while the panel is open and confirm the
   **Add selection** control appears.
 - [ ] Click **Add selection** and confirm the selected text inserts with the
@@ -54,6 +68,19 @@
   structured per-note folders.
 - [ ] Click **New note** while the library view is open and confirm the view
   switches back to a clean, empty editor.
+- [ ] Pin a note and confirm it sorts to the top of the list regardless of
+  the active sort mode, and that pinning does not change its "last updated"
+  time.
+- [ ] Switch the sort control between Recently updated, Recently created,
+  and Title A–Z and confirm the order changes correctly.
+- [ ] Toggle the "This site" filter and confirm only notes with a visited
+  page on the current site remain.
+- [ ] Use **Select** to multi-select several notes and bulk-delete them;
+  confirm exactly the selected notes are removed and the mode exits
+  cleanly.
+- [ ] Use **Import** to load a `.md` file this app previously exported and
+  confirm the resulting library entry's title, date/time, body, and visited
+  pages match the original note.
 
 ## Privacy And Permissions
 

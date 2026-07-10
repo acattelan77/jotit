@@ -18,8 +18,8 @@
             id="clearBtn"
             class="ghost icon-button"
             type="button"
-            aria-label="New note"
-            title="New note"
+            aria-label="New note (Cmd/Ctrl+Alt+N)"
+            title="New note (Cmd/Ctrl+Alt+N)"
             data-label="New"
           >
             <svg
@@ -36,8 +36,8 @@
             id="saveBtn"
             class="ghost icon-button"
             type="button"
-            aria-label="Save .md"
-            title="Save .md"
+            aria-label="Save .md (Cmd/Ctrl+S)"
+            title="Save .md (Cmd/Ctrl+S)"
             data-label="Save"
           >
             <svg
@@ -55,8 +55,8 @@
             id="saveAsBtn"
             class="ghost icon-button"
             type="button"
-            aria-label="Save as..."
-            title="Save as..."
+            aria-label="Save as... (Cmd/Ctrl+Shift+S)"
+            title="Save as... (Cmd/Ctrl+Shift+S)"
             data-label="Save as"
           >
             <svg
@@ -74,8 +74,8 @@
             id="libraryToggleBtn"
             class="ghost icon-button"
             type="button"
-            aria-label="Note library"
-            title="Note library"
+            aria-label="Note library (Alt+L)"
+            title="Note library (Alt+L)"
             data-label="Library"
             aria-pressed="false"
           >
@@ -131,6 +131,26 @@
         </div>
       </header>
 
+      <div id="onboardingHint" class="onboarding-hint" role="status" hidden>
+        <span class="onboarding-hint__text">
+          Notes save automatically as you type — <strong>Save</strong>/<strong>Save as</strong>
+          are just for exporting to disk. Click <strong>Library</strong> above to find
+          everything you've written.
+        </span>
+        <button
+          id="onboardingHintDismiss"
+          class="onboarding-hint__dismiss"
+          type="button"
+          aria-label="Dismiss"
+          title="Dismiss"
+        >
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
       <section id="metaSection" class="meta">
         <label class="field field--context">
           <div class="field-inline field-inline--text">
@@ -170,12 +190,6 @@
             </button>
           </div>
         </label>
-        <button
-          id="contextSuggestion"
-          class="context-suggestion"
-          type="button"
-          hidden
-        ></button>
 
         <div class="field-group">
           <label class="field">
@@ -300,27 +314,27 @@
           </div>
           <div class="editor-stack">
           <div class="toolbar" role="toolbar" aria-label="Formatting options">
-            <button type="button" data-format="bold" title="Bold (Cmd+B)" data-label="Bold" aria-label="Bold">
+            <button type="button" data-format="bold" title="Bold (Cmd+B)" data-label="Bold (Cmd+B)" aria-label="Bold (Cmd+B)">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M6 4h8a4 4 0 0 1 0 8H6z" />
                 <path d="M6 12h9a4 4 0 0 1 0 8H6z" />
               </svg>
             </button>
-            <button type="button" data-format="italic" title="Italic (Cmd+I)" data-label="Italic" aria-label="Italic">
+            <button type="button" data-format="italic" title="Italic (Cmd+I)" data-label="Italic (Cmd+I)" aria-label="Italic (Cmd+I)">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <line x1="19" y1="4" x2="10" y2="4" />
                 <line x1="14" y1="20" x2="5" y2="20" />
                 <line x1="15" y1="4" x2="9" y2="20" />
               </svg>
             </button>
-            <button type="button" data-format="heading" title="Heading" data-label="Heading" aria-label="Heading">
+            <button type="button" data-format="heading" title="Heading (Cmd+Shift+H)" data-label="Heading (Cmd+Shift+H)" aria-label="Heading (Cmd+Shift+H)">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <line x1="6" y1="4" x2="6" y2="20" />
                 <line x1="18" y1="4" x2="18" y2="20" />
                 <line x1="6" y1="12" x2="18" y2="12" />
               </svg>
             </button>
-            <button type="button" data-format="ul" title="Bullet list" data-label="Bullets" aria-label="Bullet list">
+            <button type="button" data-format="ul" title="Bullet list (Cmd+Shift+8)" data-label="Bullets (Cmd+Shift+8)" aria-label="Bullet list (Cmd+Shift+8)">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <line x1="9" y1="6" x2="21" y2="6" />
                 <line x1="9" y1="12" x2="21" y2="12" />
@@ -330,7 +344,7 @@
                 <circle cx="4" cy="18" r="1" />
               </svg>
             </button>
-            <button type="button" data-format="ol" title="Numbered list" data-label="Numbered" aria-label="Numbered list">
+            <button type="button" data-format="ol" title="Numbered list (Cmd+Shift+7)" data-label="Numbered (Cmd+Shift+7)" aria-label="Numbered list (Cmd+Shift+7)">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <line x1="10" y1="6" x2="21" y2="6" />
                 <line x1="10" y1="12" x2="21" y2="12" />
@@ -340,29 +354,29 @@
                 <path d="M4 14h2" />
               </svg>
             </button>
-            <button type="button" data-format="code" title="Inline code" data-label="Code" aria-label="Inline code">
+            <button type="button" data-format="code" title="Inline code (Cmd+E)" data-label="Code (Cmd+E)" aria-label="Inline code (Cmd+E)">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <polyline points="16 18 22 12 16 6" />
                 <polyline points="8 6 2 12 8 18" />
               </svg>
             </button>
-            <button type="button" data-format="codeblock" title="Code block" data-label="Code block" aria-label="Code block">
+            <button type="button" data-format="codeblock" title="Code block (Cmd+Shift+K)" data-label="Code block (Cmd+Shift+K)" aria-label="Code block (Cmd+Shift+K)">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="3" y="4" width="18" height="16" rx="2" />
                 <polyline points="9 9 6.5 12 9 15" />
                 <polyline points="15 9 17.5 12 15 15" />
               </svg>
             </button>
-            <button type="button" data-format="highlight" title="Highlight" data-label="Highlight" aria-label="Highlight">
+            <button type="button" data-format="highlight" title="Highlight (Cmd+Shift+9)" data-label="Highlight (Cmd+Shift+9)" aria-label="Highlight (Cmd+Shift+9)">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M14 4l6 6-8.5 8.5H5v-5.5z" />
                 <line x1="4" y1="21" x2="9" y2="21" />
               </svg>
             </button>
-            <button type="button" data-format="link" title="Link" data-label="Link" aria-label="Link">
+            <button type="button" data-format="timestamp" title="Insert timestamp (Cmd+Shift+;)" data-label="Time (Cmd+Shift+;)" aria-label="Insert timestamp (Cmd+Shift+;)">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1" />
-                <path d="M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1" />
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 3" />
               </svg>
             </button>
           </div>
@@ -391,10 +405,30 @@
             id="librarySearch"
             type="text"
             class="library-view__search"
-            placeholder="Search saved notes..."
+            placeholder="Search title, notes, or visited pages..."
             autocomplete="off"
-            aria-label="Search saved notes"
+            aria-label="Search saved notes by title, body text, or visited page"
           />
+          <button
+            id="libraryImportBtn"
+            class="ghost icon-button"
+            type="button"
+            aria-label="Import a note file"
+            title="Import a Jot it! .md export"
+            data-label="Import"
+          >
+            <svg
+              class="icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 8 12 3 17 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </button>
+          <input id="libraryImportInput" type="file" accept=".md,text/markdown" hidden />
           <button
             id="libraryExportAllBtn"
             class="ghost icon-button"
@@ -416,13 +450,50 @@
             </svg>
           </button>
         </div>
+        <div class="library-view__filters">
+          <select id="librarySortSelect" class="library-view__sort" aria-label="Sort saved notes">
+            <option value="updated">Recently updated</option>
+            <option value="created">Recently created</option>
+            <option value="title">Title A–Z</option>
+          </select>
+          <button
+            id="libraryFilterSiteBtn"
+            class="library-filter-chip"
+            type="button"
+            aria-pressed="false"
+            title="Show only notes with a visited page from the current site"
+          >
+            This site
+          </button>
+          <button
+            id="libraryMultiSelectBtn"
+            class="library-filter-chip"
+            type="button"
+            aria-pressed="false"
+            title="Select multiple notes to delete at once"
+          >
+            Select
+          </button>
+        </div>
+        <div id="libraryBulkBar" class="library-bulk-bar" hidden>
+          <span id="libraryBulkCount" class="library-bulk-bar__count">0 selected</span>
+          <div class="library-bulk-bar__actions">
+            <button id="libraryBulkDeleteBtn" type="button" class="ghost" disabled>Delete</button>
+            <button id="libraryBulkCancelBtn" type="button" class="ghost">Cancel</button>
+          </div>
+        </div>
         <div id="libraryList" class="library-list"></div>
         <p id="libraryEmptyState" class="library-empty" hidden></p>
       </section>
 
       <footer class="actions">
         <div id="statusMessage" class="toast" role="status" aria-live="polite"></div>
-        <span id="versionNumber" class="version-number">v. 1.3.0</span>
+        <span
+          id="versionNumber"
+          class="version-number"
+          title="What's new in v1.3.0: an automatic note library, search, pin, sort, import, and bulk export"
+          >v. 1.3.0</span
+        >
       </footer>
     </main>
 

@@ -8,14 +8,31 @@ structure for readable notes, not a full word processor.
 ## Supported formatting
 
 Bold, italic, heading, bullet list, numbered list, inline code, code block,
-highlight, links — via `applyFormat()`, implemented with
+highlight, timestamp — via `applyFormat()`, implemented with
 `document.execCommand` plus manual DOM surgery for headings, code blocks, and
 highlight (execCommand's support for these is inconsistent or nonexistent
-across browsers, hence the manual handling).
+across browsers, hence the manual handling). No toolbar link-insert control
+— see [Links](#links) below.
 
-Keyboard shortcuts: Cmd/Ctrl+B (bold), Cmd/Ctrl+I (italic). Toolbar button
+Editor-local keyboard shortcuts, every one shown in its toolbar button's
+hover tooltip: Cmd/Ctrl+B (bold), Cmd/Ctrl+I (italic), Cmd/Ctrl+E (inline
+code), Cmd/Ctrl+Shift+H (heading), Cmd/Ctrl+Shift+K (code block),
+Cmd/Ctrl+Shift+8 (bullet list), Cmd/Ctrl+Shift+7 (numbered list —
+deliberately matching Google Docs' list shortcuts), Cmd/Ctrl+Shift+9
+(highlight), Cmd/Ctrl+Shift+; (insert timestamp). Toolbar button
 active-state reflects current selection formatting via
-`updateToolbarState()`.
+`updateToolbarState()`. Panel-wide shortcuts (Save, Save As, New note,
+Library toggle, Escape) are handled globally, not per-editor — see
+[architecture.md](../architecture.md#global-keyboard-shortcuts) and
+[architecture.md](../architecture.md#toolbar-command-keyboard-shortcuts).
+
+### Timestamp
+
+The "Insert timestamp" toolbar button inserts the current local time (`HH:MM
+— `) as plain text at the caret — a cheap zero-friction way to mark when
+something was said/decided without hand-typing a time, aimed at the
+meeting-notetaker use case. No toggle/undo state to track (unlike code
+block/highlight): each click inserts a fresh stamp.
 
 Heading and code-block insertion (both the toolbar action and paste-as-code,
 see below) share a helper, `insertBlockElement()`: if inserting the new block
@@ -37,17 +54,26 @@ stay significant (still `white-space: pre`-like), but a line, or even a
 single long unbroken token (a hash, a URL with no spaces), never pushes the
 panel wider than the fixed editor width.
 
-**Pasting text defaults to a code block.** The `notesInput` `paste` handler
-wraps any pasted plain text in a new `<pre><code>` (via
-`insertPastedTextAsCodeBlock`) instead of inserting it as plain prose —
-pasted text is, in this app's actual usage, almost always a snippet or quote
-copied from the page being watched, worth visually setting apart rather than
-blending into note prose. Exception: if the caret is already inside an
+**Pasting plain text inserts it as ordinary prose** (text nodes + `<br>` per
+line, via `insertPastedTextAsPlainText`) — matching the default in every
+other notes/document editor. Exception: if the caret is already inside an
 existing code block when pasting, the text is appended into that block as
-plain text instead of nesting a new `<pre>` inside it (falls back to
-`execCommand("insertText")` for that case). Image paste (data-URI or remote)
-is handled separately, upstream of this check — see [Images](#images) below;
-this only affects plain-text clipboard content.
+plain text instead (falls back to `execCommand("insertText")` for that
+case). Image paste (data-URI or remote) is handled separately, upstream of
+this check — see [Images](#images) below; this only affects plain-text
+clipboard content.
+
+An earlier version of this app wrapped every plain-text paste in a `<pre>`
+code block by default, on the theory that pasted text is usually a
+snippet/quote copied from the page being read. In practice this made pasting
+an agenda, a paragraph to annotate, or any other ordinary prose look broken
+(unexpectedly monospaced) the first time a new user did it, with no visible
+explanation or way to opt out — flagged as a top usability blocker in a
+2026-07-10 product review and reverted the same day. **Captured page
+selections are unaffected** — see [Selection insertion](#selection-insertion)
+below, which still deliberately uses a code block for a different, narrower
+reason (a quoted external source with a link back to it, not a generic paste
+default).
 
 Two contenteditable-specific correctness issues had to be worked around,
 both are load-bearing — don't simplify them away without re-verifying in a
@@ -128,9 +154,21 @@ silently disagree about what's supported.
 
 ## Links
 
-Every link the app creates (toolbar "Link" format, page-selection insertion,
-links loaded from Markdown) carries `target="_blank" rel="noopener
-noreferrer"` and a `title` hint (`"<url> — ⌘/Ctrl+Click to open"`). Those
+**No toolbar link-insert control.** A toolbar "Link" button existed briefly
+(2026-07-10, replacing a native `prompt()` with an in-panel dialog) and was
+removed the same day at the product owner's direction, to make room in the
+toolbar for the timestamp button without the row overflowing the panel
+width — see [roadmap.md](../plan/roadmap.md). The only ways a link ends up
+in a note now: it was already there in an imported/reopened note, or the
+user typed literal `[text](url)` Markdown syntax and it got converted to a
+real `<a>` the next time the note round-trips through `markdownToHtml` (on
+reload or reopening from the library) — see
+[`markdownToHtml`](../architecture.md) in `lib/note-utils.js`. There is no
+live-as-you-type conversion of typed Markdown syntax in the editor.
+
+Every link the app creates (page-selection insertion, links loaded from
+Markdown) carries `target="_blank" rel="noopener noreferrer"` and a `title`
+hint (`"<url> — ⌘/Ctrl+Click to open"`). Those
 attributes alone aren't enough to make links clickable, though: browsers
 suppress an `<a>`'s default click-to-navigate behavior inside a
 contenteditable region, specifically so users can click into link text to

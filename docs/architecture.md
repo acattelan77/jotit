@@ -113,6 +113,39 @@ keeps the [note library](#note-library-indexeddb) up to date — see
 [ADR-0007](decisions/0007-autosave-to-library.md); Save/Save As have no
 library-related effect at all.
 
+### Global keyboard shortcuts
+
+Handled in a single `document`-level `keydown` listener (`sidepanel.js`,
+near the bottom, alongside the date-picker's own Escape handling it
+extends): Cmd/Ctrl+S (Save), Cmd/Ctrl+Shift+S (Save As), Cmd/Ctrl+Alt+N (New
+note), Alt+L (toggle library), Escape (closes the library view if open,
+otherwise the date picker if open). Added 2026-07-10 in response to a
+product usability review that flagged the complete absence of shortcuts
+beyond editor-local Bold/Italic as a top blocker for the meeting-notetaker
+persona.
+
+New note deliberately uses Cmd/Ctrl+**Alt**+N rather than a plain Alt+N:
+on macOS, plain Option+{E,`,I,N,U} are reserved dead keys for composing
+accented characters (é, è, î, ñ, ü). A plain Alt+N global shortcut would
+silently break accent input for anyone typing in a language that uses one of
+those. Alt+L has no such collision (L isn't a dead key), so Library keeps
+the simpler binding. Don't add a new Alt+<letter> shortcut without checking
+it isn't one of E/`/I/N/U first.
+
+### Toolbar-command keyboard shortcuts
+
+Separate from the global shortcuts above, and scoped to the `notesInput`
+keydown listener (same place Enter-in-code-block handling lives): Cmd/Ctrl+B
+(bold), Cmd/Ctrl+I (italic), Cmd/Ctrl+E (inline code), Cmd/Ctrl+Shift+H
+(heading), Cmd/Ctrl+Shift+K (code block), Cmd/Ctrl+Shift+8 (bullet list, Cmd/Ctrl+Shift+7
+numbered — deliberately matching Google Docs' list shortcuts), Cmd/Ctrl+Shift+9
+(highlight), Cmd/Ctrl+Shift+; (insert timestamp). The digit- and
+semicolon-based combos check `event.code` (physical key, e.g. `"Digit8"`)
+rather than `event.key`, because a Shift+digit `KeyboardEvent.key` is the
+shifted character (`"*"` for Shift+8, not `"8"`) and is layout-dependent —
+`code` avoids both problems. Every toolbar button's `title`/`data-label`
+shows its shortcut so it's discoverable on hover, not just from this doc.
+
 ## Data model
 
 ### Note draft — `chrome.storage.local["noteDraft"]`
@@ -149,9 +182,9 @@ panel reload.
 | Key | Shape | Written by | Read by |
 |---|---|---|---|
 | `noteDraft` | see above | panel | panel |
-| `contextByHost` | `{ [hostname]: { value, updatedAt } }`, capped at 100 entries (oldest evicted) | panel | panel |
 | `titleLockEnabled` | boolean | panel | panel |
 | `debugLogsEnabled` | boolean | any context (debug console) | all three contexts, via `chrome.storage.onChanged` |
+| `onboardingHintDismissed` | boolean | panel | panel |
 
 ### Note library (IndexedDB)
 
@@ -185,8 +218,17 @@ Entry shape:
   pageHistory: [{url, title, visitedAt}],
   createdAt: number,        // ms epoch, set once
   updatedAt: number,        // ms epoch, bumped on every save
+  pinned: boolean,          // optional — added 2026-07-10, absent on older
+                              // entries (falsy read, treated as unpinned)
 }
 ```
+
+`pinned` is toggled independently of everything else (`toggleLibraryEntryPinned`,
+`sidepanel.js`) and deliberately does **not** bump `updatedAt` — pinning is a
+display-order preference, not an edit to the note. Pinned entries always
+render first in the library list regardless of the active sort mode; no new
+IndexedDB index was needed since the library re-sorts client-side over the
+already-loaded cache (see [note-library.md](specs/note-library.md)).
 
 - **Written by:** `saveNoteToLibrary()`, called from `saveDraft()` — the
   same debounced (300ms) autosave that writes `chrome.storage.local`'s
