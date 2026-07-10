@@ -20,8 +20,10 @@
   there is no Link button (removed to keep the toolbar from overflowing at
   the panel's real width).
 - [ ] Hover each toolbar button and confirm the tooltip shows its keyboard
-  shortcut; confirm every shortcut (Cmd/Ctrl+B/I/E, Cmd/Ctrl+Shift+H/K/8/7/9,
-  Cmd/Ctrl+Shift+;) actually triggers that formatting action.
+  shortcut; confirm every shortcut (Cmd/Ctrl+B/I, Cmd/Ctrl+Alt+H/U/O/C/K/M/T)
+  actually triggers that formatting action, tested with real keypresses —
+  not just a script — since real OS/app-level shortcut collisions (already
+  hit once with Cmd+E and Cmd+Shift+;) can't be caught any other way.
 - [ ] Paste plain multi-line text into the editor and confirm it inserts as
   normal prose (not a code block); confirm pasting into an existing code
   block still appends inline.

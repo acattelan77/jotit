@@ -2928,47 +2928,51 @@ window.JotDebug = {
   },
 };
 
-// Toolbar-command shortcuts. Digit- and semicolon-based combos check
-// e.code (physical key position) rather than e.key, because a Shift+digit
-// KeyboardEvent's `key` is the shifted character ("*" for Shift+8, not
-// "8"), which is also layout-dependent — `code` avoids both problems.
-// Cmd/Ctrl+Shift+8 / +7 deliberately match Google Docs' bullet/numbered
-// list shortcuts.
+// Toolbar-command shortcuts, all Cmd/Ctrl+Alt+<letter> (except Bold/Italic,
+// which keep the universal Cmd/Ctrl+B/I with no Alt). An earlier version
+// used Cmd/Ctrl+Shift+<digit/;> combos (matching Google Docs' list
+// shortcuts) — reverted after real-world testing found actual collisions
+// a synthetic-KeyboardEvent test can't catch: Cmd+E was already bound to
+// something else entirely (opened another app), and Cmd+Shift+; never
+// reached the page at all. Cmd/Ctrl+Alt+<letter> is the same low-collision
+// pattern New note already uses successfully (Cmd/Ctrl+Alt+N) — letters
+// are also layout-safer than digit/punctuation combos, whose `key` value
+// changes under Shift (e.g. Shift+8 → "*") and varies by keyboard layout.
 notesInput.addEventListener("keydown", (e) => {
   const mod = e.metaKey || e.ctrlKey;
-  if (mod && !e.shiftKey && e.key === "b") {
+  if (mod && !e.altKey && !e.shiftKey && e.key === "b") {
     e.preventDefault();
     applyFormat("bold");
   }
-  if (mod && !e.shiftKey && e.key === "i") {
+  if (mod && !e.altKey && !e.shiftKey && e.key === "i") {
     e.preventDefault();
     applyFormat("italic");
   }
-  if (mod && !e.shiftKey && e.key.toLowerCase() === "e") {
-    e.preventDefault();
-    applyFormat("code");
-  }
-  if (mod && e.shiftKey && e.key.toLowerCase() === "h") {
+  if (mod && e.altKey && e.key.toLowerCase() === "h") {
     e.preventDefault();
     applyFormat("heading");
   }
-  if (mod && e.shiftKey && e.key.toLowerCase() === "k") {
-    e.preventDefault();
-    applyFormat("codeblock");
-  }
-  if (mod && e.shiftKey && e.code === "Digit8") {
+  if (mod && e.altKey && e.key.toLowerCase() === "u") {
     e.preventDefault();
     applyFormat("ul");
   }
-  if (mod && e.shiftKey && e.code === "Digit7") {
+  if (mod && e.altKey && e.key.toLowerCase() === "o") {
     e.preventDefault();
     applyFormat("ol");
   }
-  if (mod && e.shiftKey && e.code === "Digit9") {
+  if (mod && e.altKey && e.key.toLowerCase() === "c") {
+    e.preventDefault();
+    applyFormat("code");
+  }
+  if (mod && e.altKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    applyFormat("codeblock");
+  }
+  if (mod && e.altKey && e.key.toLowerCase() === "m") {
     e.preventDefault();
     applyFormat("highlight");
   }
-  if (mod && e.shiftKey && e.code === "Semicolon") {
+  if (mod && e.altKey && e.key.toLowerCase() === "t") {
     e.preventDefault();
     applyFormat("timestamp");
   }

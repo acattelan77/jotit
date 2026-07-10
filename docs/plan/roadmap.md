@@ -216,6 +216,29 @@ delete it (keeps the history legible instead of silently vanishing).
     (`scrollWidth`/`clientWidth`) and a visual zoom screenshot; every new
     shortcut triggers its formatting action; no console errors; `node
     --check` on all five JS files passes; all 79 existing tests still pass.
+- **Toolbar-command shortcuts remapped from Cmd/Ctrl+Shift+<digit/letter/;>
+  to Cmd/Ctrl+Alt+<letter>** — fixed 2026-07-10, after the entry directly
+  above shipped and the user tested it on their actual machine (not a
+  synthetic-event test harness). Two real collisions surfaced that no
+  amount of `dispatchEvent(new KeyboardEvent(...))` testing could have
+  caught, because a synthetic dispatch skips real hardware/OS/browser
+  capture entirely: **Cmd+E didn't reach the page at all** — it was
+  already bound to something else on the user's machine, which activated
+  instead — and **Cmd+Shift+; simply did nothing**. Remapped every
+  non-Bold/Italic toolbar shortcut to Cmd/Ctrl+Alt+<letter>: H (heading), U
+  (bullet list), O (numbered list), C (inline code), K (code block), M
+  (highlight), T (timestamp) — the same low-collision pattern New note
+  already used successfully (Cmd/Ctrl+Alt+N), and letter-based rather than
+  digit/punctuation-based (sidesteps the `event.code`-vs-`event.key`
+  workaround the old scheme needed). See
+  [architecture.md](../architecture.md#toolbar-command-keyboard-shortcuts).
+  Verified this time with **real keypresses** in a real browser (not
+  synthetic events): all seven new shortcuts correctly triggered their
+  formatting action, Bold/Italic unaffected, no external app activated, no
+  console errors. Lesson for future shortcut work: synthetic-event testing
+  proves the JS branch logic is correct, but cannot prove a key combo
+  actually reaches the page on a real machine — that requires an actual
+  keypress test, ideally on hardware that isn't a fresh/empty test profile.
 - **Notes are saved to the library automatically — no explicit Save
   required** — shipped 2026-07-10, same day as the note library itself (see
   the entry directly below), superseding that entry's original "only on

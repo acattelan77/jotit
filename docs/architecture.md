@@ -136,15 +136,25 @@ it isn't one of E/`/I/N/U first.
 
 Separate from the global shortcuts above, and scoped to the `notesInput`
 keydown listener (same place Enter-in-code-block handling lives): Cmd/Ctrl+B
-(bold), Cmd/Ctrl+I (italic), Cmd/Ctrl+E (inline code), Cmd/Ctrl+Shift+H
-(heading), Cmd/Ctrl+Shift+K (code block), Cmd/Ctrl+Shift+8 (bullet list, Cmd/Ctrl+Shift+7
-numbered — deliberately matching Google Docs' list shortcuts), Cmd/Ctrl+Shift+9
-(highlight), Cmd/Ctrl+Shift+; (insert timestamp). The digit- and
-semicolon-based combos check `event.code` (physical key, e.g. `"Digit8"`)
-rather than `event.key`, because a Shift+digit `KeyboardEvent.key` is the
-shifted character (`"*"` for Shift+8, not `"8"`) and is layout-dependent —
-`code` avoids both problems. Every toolbar button's `title`/`data-label`
-shows its shortcut so it's discoverable on hover, not just from this doc.
+(bold), Cmd/Ctrl+I (italic, both with no Alt), then Cmd/Ctrl+Alt+<letter>
+for everything else: H (heading), U (bullet list), O (numbered list), C
+(inline code), K (code block), M (highlight), T (insert timestamp). Every
+toolbar button's `title`/`data-label` shows its shortcut so it's
+discoverable on hover, not just from this doc.
+
+An earlier version used Cmd/Ctrl+Shift+<digit/letter/;> combos (Cmd+E for
+code, Cmd+Shift+8/7 matching Google Docs' list shortcuts, Cmd+Shift+; for
+timestamp) — reverted the same day after real-world testing surfaced
+exactly the class of bug a synthetic `KeyboardEvent` test can't catch: on
+the tester's actual machine, Cmd+E was already bound to something else
+(activated a different app instead of reaching the page at all), and
+Cmd+Shift+; never reached the page either. Cmd/Ctrl+Alt+<letter> is the
+same low-collision pattern New note already used successfully
+(Cmd/Ctrl+Alt+N); letters are also layout-safer than digit/punctuation
+combos, whose `key` value changes under Shift (e.g. Shift+8 → `"*"`, not
+`"8"`) and varies by keyboard layout — `event.code` checks (needed to work
+around that) are no longer necessary now that nothing here is
+digit/punctuation-based.
 
 ## Data model
 

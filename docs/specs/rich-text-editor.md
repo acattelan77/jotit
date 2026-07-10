@@ -15,11 +15,13 @@ across browsers, hence the manual handling). No toolbar link-insert control
 — see [Links](#links) below.
 
 Editor-local keyboard shortcuts, every one shown in its toolbar button's
-hover tooltip: Cmd/Ctrl+B (bold), Cmd/Ctrl+I (italic), Cmd/Ctrl+E (inline
-code), Cmd/Ctrl+Shift+H (heading), Cmd/Ctrl+Shift+K (code block),
-Cmd/Ctrl+Shift+8 (bullet list), Cmd/Ctrl+Shift+7 (numbered list —
-deliberately matching Google Docs' list shortcuts), Cmd/Ctrl+Shift+9
-(highlight), Cmd/Ctrl+Shift+; (insert timestamp). Toolbar button
+hover tooltip: Cmd/Ctrl+B (bold), Cmd/Ctrl+I (italic), and
+Cmd/Ctrl+Alt+<letter> for the rest — H (heading), U (bullet list), O
+(numbered list), C (inline code), K (code block), M (highlight), T (insert
+timestamp). See [architecture.md](../architecture.md#toolbar-command-keyboard-shortcuts)
+for why this scheme (not Cmd/Ctrl+Shift+<digit/letter/;>) — a real-world
+collision (Cmd+E already bound to something else on the tester's machine)
+that no amount of synthetic-event testing caught. Toolbar button
 active-state reflects current selection formatting via
 `updateToolbarState()`. Panel-wide shortcuts (Save, Save As, New note,
 Library toggle, Escape) are handled globally, not per-editor — see
