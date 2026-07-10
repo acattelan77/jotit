@@ -1,5 +1,8 @@
 {
   "name": "jot-it-extension",
   "private": true,
-  "version": "1.2.3"
+  "version": "1.2.3",
+  "scripts": {
+    "test": "node --test"
+  }
 }

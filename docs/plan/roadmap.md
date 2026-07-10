@@ -9,19 +9,15 @@ change.
 
 ## Now
 
-*(Nothing actively in progress as of this writing — this doc structure
-itself was the most recent piece of work. See
-[handoffs/log/2026-07-09-0001-docs-bootstrap.md](../handoffs/log/2026-07-09-0001-docs-bootstrap.md).)*
+*(Unit tests for `lib/note-utils.js` are done — see Resolved below. Picking
+up the note library next: [ADR-0006](../decisions/0006-note-library-via-indexeddb.md)
++ [note-library.md](../specs/note-library.md) are fully scoped, implementation
+starting. Syntax highlighting and the smaller tech-debt backlog items are on
+hold — not actively being worked.)*
 
 ## Next (suggested, unordered — pick based on what you're actually asked to
 do; this isn't a mandate)
 
-- Add real unit tests for `lib/note-utils.js` (filename building,
-  Markdown↔HTML conversion). It's pure, dependency-free, and CI already runs
-  `node --test` — it's just testing nothing right now (see Known Issues #10).
-  This is the highest-leverage low-risk improvement available: it would
-  catch regressions in the export path that currently has zero automated
-  coverage.
 - Consider promoting `detachedWindows`/`openPanelTabs` in `background.js`
   from in-memory `Map`/`Set` to `chrome.storage.session`, closing the
   service-worker-eviction gap described in
@@ -110,26 +106,36 @@ delete it (keeps the history legible instead of silently vanishing).
    never sent by any current caller. Either wire it up or remove it; leaving
    it is a small but real source of confusion about what the actual message
    protocol is (see [`../architecture.md`](../architecture.md#message-passing)).
-8. **CI is a no-op** — `.github/workflows/ci.yml` runs `node --test`, which
-   currently passes vacuously because there are no test files. This gives
-   false confidence. Directly related to backlog item #1 above (write the
-   tests) — until then, treat CI green as meaning nothing about export
-   correctness.
-9. **Version string kept in sync by hand in three places** —
-   `package.json`, `manifest.json`, and a hardcoded `v. 1.2.1` string in
+8. **Version string kept in sync by hand in three places** —
+   `package.json`, `manifest.json`, and a hardcoded `v. 1.2.3` string in
    `sidepanel.html`. No build step enforces consistency (see
    `GO_LIVE_PLAN.md`/`RELEASE_CHECKLIST.md`, which already call this out as a
    manual release step). Low priority unless it starts causing actual
    release mistakes.
-10. **DOM lookups by ID with no failure signal** — all top-level
-    `getElementById` consts in `sidepanel.js`, mostly accessed via optional
-    chaining, so a renamed `id` in `sidepanel.html` fails silently (element
-    becomes `null`, downstream code just no-ops) instead of erroring loudly.
-    Worth a lint rule or startup assertion if this ever causes a real bug
-    during a refactor.
+9. **DOM lookups by ID with no failure signal** — all top-level
+   `getElementById` consts in `sidepanel.js`, mostly accessed via optional
+   chaining, so a renamed `id` in `sidepanel.html` fails silently (element
+   becomes `null`, downstream code just no-ops) instead of erroring loudly.
+   Worth a lint rule or startup assertion if this ever causes a real bug
+   during a refactor.
 
 ## Resolved
 
+- **No automated test coverage / CI was a no-op** — fixed 2026-07-10. Added
+  `test/note-utils.test.js`: 79 tests covering `lib/note-utils.js` (filename
+  building, URL/image normalization, and both directions of the
+  Markdown↔HTML converter, including a round-trip suite and a hand-rolled
+  DOM shim so the `htmlToMarkdown` direction stays testable without adding a
+  jsdom dependency — consistent with [ADR-0001](../decisions/0001-static-unbundled-extension.md)).
+  `.github/workflows/ci.yml` already ran `node --test`; it now actually
+  verifies something. Caught a real, previously-unnoticed bug in the
+  process: blockquotes (`> quoted text`) never actually rendered, because
+  the `>` → `&gt;` HTML-escape ran before the blockquote regex ever saw the
+  literal `>` — confirmed by reverting the fix and watching the test fail.
+  Fixed with the same stash/restore pattern already used for code
+  protection (see the [ADR-0003](../decisions/0003-hand-rolled-markdown-conversion.md)
+  update). This resolves the old known-issue "CI is a no-op" and the "add
+  unit tests" backlog item — both removed from their prior sections.
 - **Docked panel note changed while switching tabs** — fixed 2026-07-10.
   Normal docked opens now prefer window-scoped side-panel presentation, tab
   activation no longer creates tab-specific panel options, note titles stop
@@ -160,3 +166,23 @@ delete it (keeps the history legible instead of silently vanishing).
   which Obsidian renders as real clickable links. See
   [ADR-0003](../decisions/0003-hand-rolled-markdown-conversion.md) and
   [export-and-save.md](../specs/export-and-save.md).
+- **Paste defaults to code block** — shipped 2026-07-10. Pasted plain text
+  wraps in `<pre><code>` via `insertPastedTextAsCodeBlock` (reuses
+  `insertBlockElement`). If caret is already inside a code block, text
+  appends to it instead of nesting. Image paste handled separately upstream.
+- **Selection insertion → code block** — shipped 2026-07-10. The "Add
+  selection" button now inserts captured text as a code block with the
+  clickable source link as its own paragraph below, matching paste behavior.
+- **Clickable links via Cmd/Ctrl+Click** — shipped 2026-07-09. Links in the
+  contenteditable editor open via `chrome.tabs.create` (falling back to
+  `window.open`) on Cmd/Ctrl+Click, matching Notion/Docs convention.
+- **Image paste & export** — shipped 2026-07-09. Clipboard images (data-URI
+  or remote) are inserted; `buildObsidianImageExport` rewrites them to
+  `attachments/<note>-image-N.<ext>` at export time. Notes with images
+  export as a folder.
+- **Editor word/character count** — shipped 2026-07-09. Live stats bar
+  below the editor using `Intl.Segmenter` for word boundaries.
+- **Material 3 design system (v3)** — shipped 2026-07-10 (replacing v2 warm
+  theme). Chrome-native palette (cool neutrals, `#0b57d0` accent), Roboto
+  font self-hosted, circular icon buttons, flat tonal fills, consistent
+  Material 3 shape scale. See `design-system/design-system/DESIGN_SYSTEM.md`.

@@ -59,3 +59,20 @@ a real parser — the general fragility this ADR describes still applies to
 everything else (e.g. nested formatting, mixed list types). Any new regex
 pass added to `markdownToHtml` must run after the code-stash step or it
 reopens this exact class of bug.
+
+### Update (2026-07-10): blockquotes were silently broken
+
+Writing real unit tests (`test/note-utils.test.js`, see
+[`docs/plan/roadmap.md`](../plan/roadmap.md) Resolved) found a second,
+longer-standing instance of exactly this class of bug: `markdownToHtml`
+escapes `>` to `&gt;` as part of the initial HTML-entity escaping, which ran
+*before* the blockquote regex (`^> (.+)$`) — so by the time that regex ran,
+every literal `> ` had already become `&gt; ` and could never match.
+Blockquotes had never actually converted. Fixed the same way as the code
+passes above: stash blockquote lines into a placeholder token before the `>`
+escape runs, restore after. The lesson generalizes: **any regex pass in this
+converter that depends on a literal character also used in the initial
+escaping step (`&`, `<`, `>`) needs to run before that character is escaped,
+or be stashed like code/blockquotes are** — worth checking for this
+specifically if you add a new construct that uses `<`, `>`, or `&` as a
+marker.

@@ -185,7 +185,7 @@ Filenames: `"YYYY-MM-DD - hHH:MM - <safe title>.md"`
 
 ## Module map
 
-`sidepanel.js` is a single ~2000-line file with no ES modules — see
+`sidepanel.js` is a single ~2220-line file with no ES modules — see
 [`glossary.md`](glossary.md) for the full region-by-region responsibility
 map and line ranges. Read that before adding new top-level functions so new
 code lands in the right conceptual region instead of at the bottom of the
