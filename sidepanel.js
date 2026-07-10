@@ -591,6 +591,80 @@ const syncPanelOpenState = () => {
 };
 
 
+// contenteditable suppresses a link's default click-to-navigate behavior
+// (so users can click into link text to edit it), so opening a link is an
+// explicit Cmd/Ctrl+Click instead of a plain click — see the notesInput
+// click listener below.
+const openLinkInNewTab = (url) => {
+  if (typeof chrome !== "undefined" && chrome.tabs?.create) {
+    chrome.tabs.create({ url });
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+};
+
+// Inserts a block-level element (heading, code block, ...) at `range`. If
+// that lands it inside an existing <p>/<div>, splits that parent around the
+// new block instead of leaving invalid block-inside-<p> nesting.
+const insertBlockElement = (range, blockEl) => {
+  range.insertNode(blockEl);
+  const parent = blockEl.parentElement;
+  if (!parent || parent === notesInput) return;
+  const tag = parent.tagName.toLowerCase();
+  if (tag !== "p" && tag !== "div") return;
+
+  const rest = document.createRange();
+  rest.setStartAfter(blockEl);
+  rest.setEndAfter(parent.lastChild || parent);
+  const restFragment = rest.extractContents();
+  const afterP = document.createElement("p");
+  if (restFragment.textContent?.trim()) {
+    afterP.appendChild(restFragment);
+  }
+
+  const beforeP = document.createElement("p");
+  const beforeRange = document.createRange();
+  beforeRange.selectNodeContents(parent);
+  beforeRange.setEndBefore(blockEl);
+  const beforeFragment = beforeRange.extractContents();
+  if (beforeFragment.textContent?.trim()) {
+    beforeP.appendChild(beforeFragment);
+  }
+
+  parent.parentNode?.insertBefore(beforeP, parent);
+  parent.parentNode?.insertBefore(blockEl, parent);
+  if (afterP.textContent?.trim()) {
+    parent.parentNode?.insertBefore(afterP, parent);
+  }
+  parent.remove();
+};
+
+// Text pasted from elsewhere (typically a webpage, given this app's job) is
+// wrapped in a code block by default, since that's usually a snippet/quote
+// worth visually setting apart rather than blending into normal prose. If
+// the caret is already inside a code block, the paste just extends that
+// block's text instead of nesting a new one.
+const insertPastedTextAsCodeBlock = (text) => {
+  const selection = ensureSelectionInNotes();
+  if (!selection || selection.rangeCount === 0) return;
+  const normalized = text.replace(/\r\n?/g, "\n");
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = normalized;
+  pre.appendChild(code);
+  insertBlockElement(range, pre);
+  if (!pre.nextSibling) {
+    pre.parentNode?.insertBefore(document.createElement("p"), null);
+  }
+  const caretRange = document.createRange();
+  caretRange.selectNodeContents(code);
+  caretRange.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(caretRange);
+};
+
 const applyFormat = (format) => {
   notesInput.focus();
   const selection = ensureSelectionInNotes();
@@ -632,35 +706,7 @@ const applyFormat = (format) => {
         } else {
           h2.appendChild(fragment);
         }
-        headingRange.insertNode(h2);
-        if (h2.parentElement && h2.parentElement !== notesInput) {
-          const tag = h2.parentElement.tagName.toLowerCase();
-          if (tag === "p" || tag === "div") {
-            const parent = h2.parentElement;
-            const rest = document.createRange();
-            rest.setStartAfter(h2);
-            rest.setEndAfter(parent.lastChild || parent);
-            const restFragment = rest.extractContents();
-            const afterP = document.createElement("p");
-            if (restFragment.textContent?.trim()) {
-              afterP.appendChild(restFragment);
-            }
-            const beforeP = document.createElement("p");
-            const beforeRange = document.createRange();
-            beforeRange.selectNodeContents(parent);
-            beforeRange.setEndBefore(h2);
-            const beforeFragment = beforeRange.extractContents();
-            if (beforeFragment.textContent?.trim()) {
-              beforeP.appendChild(beforeFragment);
-            }
-            parent.parentNode?.insertBefore(beforeP, parent);
-            parent.parentNode?.insertBefore(h2, parent);
-            if (afterP.textContent?.trim()) {
-              parent.parentNode?.insertBefore(afterP, parent);
-            }
-            parent.remove();
-          }
-        }
+        insertBlockElement(headingRange, h2);
       }
       break;
     }
@@ -679,6 +725,87 @@ const applyFormat = (format) => {
       codeRange.deleteContents();
       codeRange.insertNode(code);
       break;
+    case "codeblock": {
+      if (!selection || selection.rangeCount === 0) return;
+      const codeBlockRange = selection.getRangeAt(0);
+      const anchorNode = selection.anchorNode || selection.focusNode;
+      const existingPre = anchorNode ? findClosestTag(anchorNode, ["pre"]) : null;
+      if (existingPre) {
+        const el = anchorNode?.nodeType === Node.ELEMENT_NODE
+          ? anchorNode
+          : anchorNode?.parentElement;
+        const preEl = el?.closest?.(existingPre);
+        if (preEl) {
+          const p = document.createElement("p");
+          const codeEl = preEl.querySelector("code") || preEl;
+          while (codeEl.firstChild) {
+            p.appendChild(codeEl.firstChild);
+          }
+          preEl.parentNode?.insertBefore(p, preEl);
+          preEl.remove();
+        }
+      } else {
+        const fragment = codeBlockRange.extractContents();
+        const pre = document.createElement("pre");
+        const codeBlock = document.createElement("code");
+        const isEmpty = !fragment.textContent?.trim();
+        if (isEmpty) {
+          // A literal placeholder text node here (e.g. "code") would let the
+          // browser replace the whole <code> with a styled <span> the moment
+          // the user selects-and-types over it, silently losing the code
+          // tag. An empty element anchored by a <br> is the standard
+          // contenteditable idiom for "focusable empty line" and keeps
+          // typing inside the actual <code> element.
+          codeBlock.appendChild(document.createElement("br"));
+        } else {
+          codeBlock.appendChild(fragment);
+        }
+        pre.appendChild(codeBlock);
+        insertBlockElement(codeBlockRange, pre);
+        if (!pre.nextSibling) {
+          pre.parentNode?.insertBefore(document.createElement("p"), null);
+        }
+        if (isEmpty) {
+          const caretRange = document.createRange();
+          caretRange.setStart(codeBlock, 0);
+          caretRange.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(caretRange);
+        }
+      }
+      break;
+    }
+    case "highlight": {
+      if (!selection || selection.rangeCount === 0) return;
+      const highlightRange = selection.getRangeAt(0);
+      const highlightAnchor = selection.anchorNode || selection.focusNode;
+      const existingMark = highlightAnchor
+        ? findClosestTag(highlightAnchor, ["mark"])
+        : null;
+      if (existingMark) {
+        const el = highlightAnchor?.nodeType === Node.ELEMENT_NODE
+          ? highlightAnchor
+          : highlightAnchor?.parentElement;
+        const markEl = el?.closest?.(existingMark);
+        if (markEl) {
+          const parent = markEl.parentNode;
+          while (markEl.firstChild) {
+            parent.insertBefore(markEl.firstChild, markEl);
+          }
+          parent.removeChild(markEl);
+        }
+      } else {
+        const fragment = highlightRange.extractContents();
+        const mark = document.createElement("mark");
+        if (!fragment.textContent?.trim()) {
+          mark.textContent = "highlight";
+        } else {
+          mark.appendChild(fragment);
+        }
+        highlightRange.insertNode(mark);
+      }
+      break;
+    }
     case "link":
       if (!selection || selection.rangeCount === 0) return;
       const linkRange = selection.getRangeAt(0);
@@ -689,6 +816,7 @@ const applyFormat = (format) => {
         a.href = url;
         a.target = "_blank";
         a.rel = "noopener noreferrer";
+        a.title = `${url} — ⌘/Ctrl+Click to open`;
         a.textContent = linkText;
         linkRange.deleteContents();
         linkRange.insertNode(a);
@@ -729,6 +857,8 @@ const updateToolbarState = () => {
     heading: toolbar.querySelector('[data-format="heading"]'),
     ul: toolbar.querySelector('[data-format="ul"]'),
     ol: toolbar.querySelector('[data-format="ol"]'),
+    codeblock: toolbar.querySelector('[data-format="codeblock"]'),
+    highlight: toolbar.querySelector('[data-format="highlight"]'),
   };
 
   if (!isSelectionInNotes()) {
@@ -758,11 +888,16 @@ const updateToolbarState = () => {
     safeQueryState("insertOrderedList") ||
     Boolean(anchorNode && findClosestTag(anchorNode, ["ol"]));
 
+  const codeblockActive = Boolean(anchorNode && findClosestTag(anchorNode, ["pre"]));
+  const highlightActive = Boolean(anchorNode && findClosestTag(anchorNode, ["mark"]));
+
   buttons.bold?.classList.toggle("active", safeQueryState("bold"));
   buttons.italic?.classList.toggle("active", safeQueryState("italic"));
   buttons.heading?.classList.toggle("active", Boolean(headingTag));
   buttons.ul?.classList.toggle("active", unorderedActive);
   buttons.ol?.classList.toggle("active", orderedActive);
+  buttons.codeblock?.classList.toggle("active", codeblockActive);
+  buttons.highlight?.classList.toggle("active", highlightActive);
 };
 
 const pluralize = (count, singular, plural = `${singular}s`) =>
@@ -1481,39 +1616,51 @@ const insertSelectionWithLink = (text, url) => {
   if (!text) return;
   const normalizedUrl = normalizeUrl(url);
   notesInput.focus();
-  const em = document.createElement("em");
-  em.textContent = text;
-  const block = document.createElement("p");
-  block.appendChild(em);
+
+  // Selected page text is a snippet/quote, same as a clipboard paste — see
+  // insertPastedTextAsCodeBlock — so it goes in a code block too, with the
+  // clickable source link as its own paragraph directly below the block
+  // rather than inline with the text.
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = text.replace(/\r\n?/g, "\n");
+  pre.appendChild(code);
+
+  let linkP = null;
   if (normalizedUrl) {
-    block.appendChild(document.createTextNode(" "));
+    linkP = document.createElement("p");
     const anchor = document.createElement("a");
     anchor.href = normalizedUrl;
     anchor.textContent = normalizedUrl;
     anchor.target = "_blank";
     anchor.rel = "noopener noreferrer";
-    block.appendChild(anchor);
+    anchor.title = `${normalizedUrl} — ⌘/Ctrl+Click to open`;
+    linkP.appendChild(anchor);
   }
+
   const spacer = document.createElement("p");
   spacer.appendChild(document.createElement("br"));
-  const fragment = document.createDocumentFragment();
-  fragment.appendChild(block);
-  fragment.appendChild(spacer);
-  let lastNode = spacer;
+
   const range = getInsertRange();
   if (!range) {
-    notesInput.appendChild(fragment);
-    updateEditorStats();
-    return;
+    notesInput.appendChild(pre);
+    if (linkP) notesInput.appendChild(linkP);
+    notesInput.appendChild(spacer);
+  } else {
+    range.deleteContents();
+    insertBlockElement(range, pre);
+    const afterPre = linkP || pre;
+    if (linkP) pre.parentNode?.insertBefore(linkP, pre.nextSibling);
+    afterPre.parentNode?.insertBefore(spacer, afterPre.nextSibling);
   }
-  range.deleteContents();
-  range.insertNode(fragment);
-  range.setStartAfter(lastNode);
-  range.collapse(true);
+
+  const caretRange = document.createRange();
+  caretRange.setStartAfter(spacer);
+  caretRange.collapse(true);
   const selection = window.getSelection();
   selection.removeAllRanges();
-  selection.addRange(range);
-  lastNotesRange = range.cloneRange();
+  selection.addRange(caretRange);
+  lastNotesRange = caretRange.cloneRange();
   updateEditorStats();
 };
 
@@ -1755,6 +1902,13 @@ contextSuggestion?.addEventListener("click", () => {
 });
 addSelectionBtn?.addEventListener("click", addPendingPageSelection);
 dismissSelectionBtn?.addEventListener("click", clearPendingPageSelection);
+notesInput.addEventListener("click", (event) => {
+  if (!(event.metaKey || event.ctrlKey)) return;
+  const link = event.target.closest?.("a[href]");
+  if (!link || !notesInput.contains(link)) return;
+  event.preventDefault();
+  openLinkInNewTab(link.href);
+});
 notesInput.addEventListener("keyup", storeNotesSelection);
 notesInput.addEventListener("mouseup", storeNotesSelection);
 notesInput.addEventListener("focus", storeNotesSelection);
@@ -1780,7 +1934,19 @@ notesInput.addEventListener("paste", (event) => {
   }
   event.preventDefault();
   const text = clipboard.getData("text/plain");
-  document.execCommand("insertText", false, text || "");
+  if (!text) return;
+  const selection = window.getSelection();
+  const anchorNode = selection?.anchorNode;
+  const pastingIntoExistingCodeBlock =
+    anchorNode && findClosestTag(anchorNode, ["pre"]);
+  if (pastingIntoExistingCodeBlock) {
+    document.execCommand("insertText", false, text);
+  } else {
+    insertPastedTextAsCodeBlock(text);
+    storeNotesSelection();
+    updateEditorStats();
+    debouncedSaveDraft();
+  }
 });
 
 notesInput.addEventListener("drop", (event) => {
@@ -1984,6 +2150,33 @@ notesInput.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "i") {
     e.preventDefault();
     applyFormat("italic");
+  }
+  if (e.key === "Enter") {
+    const selection = window.getSelection();
+    const anchorNode = selection?.anchorNode;
+    // Inside a code block, Enter should insert a line break within the
+    // block, not split it into a new paragraph the way the browser's
+    // default contenteditable "insert paragraph" behavior would.
+    if (selection && anchorNode && findClosestTag(anchorNode, ["pre"])) {
+      e.preventDefault();
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      // A caret left at the very end of a block's content (right after a
+      // lone trailing newline, with nothing after it) makes Chrome's text
+      // insertion land *before* that newline instead of at the caret — a
+      // caret at the true end of an editable region gets normalized that
+      // way. Appending a zero-width space after the newline gives the
+      // caret real content to sit between, avoiding the ambiguity. It's
+      // stripped back out in htmlToMarkdown so it never reaches saved notes.
+      const newline = document.createTextNode("\n\u200B");
+      range.insertNode(newline);
+      range.setStart(newline, 1);
+      range.setEnd(newline, 1);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      updateEditorStats();
+      debouncedSaveDraft();
+    }
   }
 });
 

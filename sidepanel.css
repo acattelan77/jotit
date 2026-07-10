@@ -40,6 +40,7 @@
   --code-bg: #eaf1fb;
   --code-ink: #0b57d0;
   --pre-bg: #f1f3f4;
+  --highlight-bg: #fef08a;
 
   --primary-bg: #0b57d0;
   --primary-ink: #ffffff;
@@ -94,6 +95,7 @@
     --code-bg: #22385c;
     --code-ink: #a8c7fa;
     --pre-bg: #2d2e31;
+    --highlight-bg: #4a3c12;
 
     --primary-bg: #a8c7fa;
     --primary-ink: #062e6f;
@@ -617,6 +619,13 @@ h1 {
   color: var(--code-ink);
 }
 
+.editor mark {
+  background: var(--highlight-bg);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
 .editor img {
   display: block;
   max-width: 100%;
@@ -665,7 +674,8 @@ h1 {
   background: var(--pre-bg);
   padding: 12px;
   border-radius: var(--radius-sm);
-  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   margin: 0.5em 0;
 }
 

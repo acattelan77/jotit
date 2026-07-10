@@ -80,9 +80,9 @@ within 1s, and sends `PAGE_SELECTION_CANDIDATE`. Background drops it unless
 the panel is visible for that tab; otherwise re-broadcasts it. The panel's
 listener dedupes and — in standalone mode — filters by `sourceTabId`. Nothing
 is inserted automatically: the panel shows a preview bar with **Add
-selection** / dismiss. Clicking **Add selection** wraps the text in `<em>`
-plus a link to the source URL and inserts it at the last known caret
-position.
+selection** / dismiss. Clicking **Add selection** inserts the text as a code
+block with the clickable source link as its own paragraph directly below the
+block, at the last known caret position.
 
 ### Save / Save As (export)
 Entirely local to the panel document — no messaging involved. Both handlers:

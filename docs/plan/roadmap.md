@@ -55,31 +55,18 @@ read the linked ADR before starting, and expect to write a new ADR
 (superseding or extending it) rather than just coding around it, per the
 ground rules in [`AGENTS.md`](../../AGENTS.md).
 
-1. **Slack-style code blocks + syntax highlighting, Obsidian-style
-   highlighting (`==text==`).** Extends
-   [rich-text-editor.md](../specs/rich-text-editor.md), which currently only
-   supports *inline* code, not fenced code blocks. Three sub-parts with
-   different levels of friction:
-   - **Fenced code blocks** (\`\`\`) — standard CommonMark, no conflict with
-     existing decisions; needs toolbar support, editor DOM handling, and
-     `htmlToMarkdown`/`markdownToHtml` support in `lib/note-utils.js` (and
-     its duplicated constants in `sidepanel.js` — see known-issue #1 below,
-     don't add a third divergent copy).
-   - **Syntax highlighting** — almost certainly needs a highlighting
-     library (e.g. highlight.js/Prism) or a meaningful hand-rolled
-     tokenizer. A library pull-in directly conflicts with
-     [ADR-0001](../decisions/0001-static-unbundled-extension.md) ("no npm
-     dependencies") — this needs an explicit ADR decision (accept the
-     dependency and supersede/amend ADR-0001, or hand-roll a minimal
-     highlighter) before implementation, not a silent `npm install`.
-   - **Text highlighting** (Obsidian's `==highlighted text==`) — not
-     standard CommonMark, but a well-known Obsidian convention. Needs a new
-     toolbar action, editor formatting support, and — like code blocks —
-     round-trip support in the hand-rolled Markdown converter
-     ([ADR-0003](../decisions/0003-hand-rolled-markdown-conversion.md)).
-     Should be documented as an intentional Obsidian-flavored-Markdown
-     extension in [export-and-save.md](../specs/export-and-save.md) once
-     built, since it's not portable to strict CommonMark renderers.
+1. **Syntax highlighting for code blocks.** Fenced code blocks and
+   `==highlighted text==` shipped 2026-07-09 (see Resolved below) —
+   plain/unhighlighted code blocks only. Actual *syntax* highlighting
+   (colorizing keywords/strings/etc. by language) was deliberately punted at
+   the product owner's direction, since it almost certainly needs a
+   highlighting library (highlight.js/Prism) or a meaningful hand-rolled
+   tokenizer. A library pull-in directly conflicts with
+   [ADR-0001](../decisions/0001-static-unbundled-extension.md) ("no npm
+   dependencies") — this needs an explicit ADR decision (accept the
+   dependency and supersede/amend ADR-0001, or commit to hand-rolling a
+   minimal tokenizer) before implementation starts, not a silent
+   `npm install`.
 
 ## Known issues / tech debt backlog
 
@@ -143,6 +130,18 @@ delete it (keeps the history legible instead of silently vanishing).
 
 ## Resolved
 
+- **Code blocks + text highlighting** — shipped 2026-07-09. Toggleable
+  toolbar buttons for fenced code blocks (`<pre><code>`) and
+  Obsidian-style `==highlight==` (`<mark>`), both round-tripping to/from
+  Markdown. Along the way, fixed two real contenteditable bugs (empty
+  code-block placeholder text losing its tag on select-and-type; Enter
+  inside a code block splitting into a new paragraph instead of a line
+  break within it) and a latent Markdown-converter bug (code containing
+  `**`/`==` getting spuriously bolded/highlighted by later regex passes —
+  now protected via a stash/restore mechanism). Syntax highlighting
+  (colorizing by language) was explicitly out of scope — see the
+  remaining item above. Details in
+  [rich-text-editor.md](../specs/rich-text-editor.md).
 - **"Saved locally" toast flashing a button shape during fade-out** — fixed
   2026-07-09. `is-ambient`/`is-error` classes were removed in the same tick
   as `is-visible`, snapping the toast back to its default pill styling

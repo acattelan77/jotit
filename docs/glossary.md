@@ -69,7 +69,7 @@ correct them here rather than leaving them stale.
 | Caret/selection persistence | `getCaretOffset`, `restoreCaretOffset`, `ensureSelectionInNotes`, `storeNotesSelection`, `getInsertRange` — needed because the contenteditable loses selection on blur/re-render |
 | Title auto-fill from active tab | `shouldAutoUpdateTitle`, `updateTitleFromActiveTab` — branches on standalone vs docked |
 | Panel-open state sync with background | `announcePanelOpen`, `setPanelTabId`, `syncPanelOpenState` |
-| Rich-text formatting / toolbar | `applyFormat` (bold/italic/heading/lists/code/link via `execCommand` + manual DOM surgery), `updateToolbarState`, keyboard shortcuts |
+| Rich-text formatting / toolbar | `applyFormat` (bold/italic/heading/lists/code/codeblock/highlight/link via `execCommand` + manual DOM surgery), `insertBlockElement` (shared block-insertion/parent-splitting helper used by heading and codeblock), `updateToolbarState`, keyboard shortcuts, Enter-in-code-block handling (in the `notesInput` keydown listener) |
 | Word/char stats | `countWords` (uses `Intl.Segmenter` if available), `updateEditorStats` |
 | Image handling (paste/drop/insert) | Local duplicates of note-utils image constants/helpers, `readFileAsDataUrl`, `dataUrlToBlob`, `createRemoteImagePlaceholder`, `insertImageIntoEditor`, `buildObsidianImageExport` |
 | Markdown/YAML export construction | `toYamlString`, `buildYamlFrontmatter`, `buildMarkdown`, `getFormData`/`getDraftData` |

@@ -27,9 +27,11 @@ copy-pasting.
 8. In standalone (detached) mode, incoming candidates are filtered by
    `sourceTabId` — a detached window only offers selections from the tab it
    detached from, not from whatever tab happens to be active in the browser.
-9. Clicking **Add selection** inserts the text wrapped in `<em>` plus a link
-   to the source URL, at the last known caret position in the editor (same
-   insertion path as [rich-text-editor.md](rich-text-editor.md)).
+9. Clicking **Add selection** inserts the text as a code block
+   (`insertSelectionWithLink`), with the clickable source link as its own
+   paragraph directly below the block, at the last known caret position in
+   the editor — same "selected text defaults to a code block" treatment as
+   a clipboard paste, see [rich-text-editor.md](rich-text-editor.md#code-blocks).
 
 ## Content script injection
 

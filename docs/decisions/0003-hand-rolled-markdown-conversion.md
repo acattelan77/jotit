@@ -42,3 +42,20 @@ this app emits (flat scalars + one list of scalar strings for
   scalar string or a list of scalar strings. If it needs to be structured
   (nested objects), that's a sign this decision needs to be revisited (write
   a superseding ADR) rather than bolted onto `toYamlString`.
+
+### Update (2026-07-09): code content vs. later regex passes
+
+Adding highlight syntax (`==text==`, see
+[rich-text-editor.md](../specs/rich-text-editor.md)) made the "order-sensitive
+regex passes" fragility above concretely dangerous rather than theoretical:
+`markdownToHtml` runs bold/italic/highlight passes over the *whole* string,
+including text already converted from fenced/inline code — so real code
+containing `**kwargs` or `a == b` would get spuriously bolded or highlighted.
+Fixed by extracting fenced/inline code into an opaque placeholder token
+before the other passes run, restoring it verbatim at the end
+(`stashCode`/`codeStash` in `markdownToHtml`). This mitigates that one
+specific interaction (code vs. later passes); it does not make the converter
+a real parser — the general fragility this ADR describes still applies to
+everything else (e.g. nested formatting, mixed list types). Any new regex
+pass added to `markdownToHtml` must run after the code-stash step or it
+reopens this exact class of bug.
