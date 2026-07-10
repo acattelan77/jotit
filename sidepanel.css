@@ -1657,6 +1657,22 @@ body:not(.standalone) #attachWindow {
   transform: translate(-50%, 0);
 }
 
+/* The last toolbar button's centered tooltip pill can extend past the
+   panel's right edge at the actual ~380px side-panel width (worst case:
+   the Timestamp button's "Time (Cmd+Shift+;)" label) — anchor it to the
+   button's right edge instead of centering, same fix already used for the
+   header's .icon-button tooltips. */
+.toolbar button:last-child[data-label]::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-4px);
+}
+
+.toolbar button:last-child[data-label]:hover::after,
+.toolbar button:last-child[data-label]:focus-visible::after {
+  transform: translateY(0);
+}
+
 
 @media (max-width: 520px) {
   .panel {
