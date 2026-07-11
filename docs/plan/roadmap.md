@@ -146,7 +146,7 @@ delete it (keeps the history legible instead of silently vanishing).
     (Save As), Cmd/Ctrl+Alt+N (New note — not plain Alt+N, see the macOS
     dead-key note in architecture.md), Alt+L (Library), Escape (closes
     the library, then the date picker, in that priority order). See
-    [architecture.md](../architecture.md#global-keyboard-shortcuts).
+    [architecture.md](../architecture.md#keyboard-shortcuts).
   - **Insert-timestamp toolbar button** — plain-text `HH:MM —` at the
     caret, for the meeting-notetaker persona.
   - **Library search placeholder/hint** made explicit about what's
@@ -209,7 +209,7 @@ delete it (keeps the history legible instead of silently vanishing).
     Cmd/Ctrl+Shift+9 (highlight), Cmd/Ctrl+Shift+; (timestamp). Digit- and
     semicolon-based combos check `event.code` rather than `event.key`
     (Shift+8's `key` is `"*"`, not `"8"`, and that's layout-dependent) —
-    see [architecture.md](../architecture.md#toolbar-command-keyboard-shortcuts).
+    see [architecture.md](../architecture.md#keyboard-shortcuts).
   - Verified in a real browser: the toolbar (9 icons, post-Link-removal)
     fits with zero horizontal overflow at the real ~380px side-panel
     width, confirmed both by a forced-width DOM check
@@ -231,7 +231,7 @@ delete it (keeps the history legible instead of silently vanishing).
   already used successfully (Cmd/Ctrl+Alt+N), and letter-based rather than
   digit/punctuation-based (sidesteps the `event.code`-vs-`event.key`
   workaround the old scheme needed). See
-  [architecture.md](../architecture.md#toolbar-command-keyboard-shortcuts).
+  [architecture.md](../architecture.md#keyboard-shortcuts).
   Verified this time with **real keypresses** in a real browser (not
   synthetic events): all seven new shortcuts correctly triggered their
   formatting action, Bold/Italic unaffected, no external app activated, no
@@ -239,6 +239,33 @@ delete it (keeps the history legible instead of silently vanishing).
   proves the JS branch logic is correct, but cannot prove a key combo
   actually reaches the page on a real machine — that requires an actual
   keypress test, ideally on hardware that isn't a fresh/empty test profile.
+- **All keyboard shortcuts removed except Bold/Italic** — fixed 2026-07-10,
+  immediately after the entry directly above. Despite that fix being
+  verified with real keypresses, the user reported on further testing that
+  every shortcut still failed except Cmd/Ctrl+B and Cmd/Ctrl+I — both the
+  global app shortcuts (Save/Save As/New note/Library) and the just-remapped
+  Cmd/Ctrl+Alt+<letter> toolbar shortcuts. Rather than attempt a third
+  scheme, removed all of it at the user's explicit direction ("remove all
+  shortcuts. they don't work. only cmd+b and cmd+i work"):
+  - `notesInput`'s keydown handler now only checks Bold/Italic.
+  - The `document`-level keydown handler reverted to its original,
+    pre-2026-07-10 form: Escape closes the date picker, nothing else. The
+    library-closing Escape behavior and the Save/Save As/New note/Library
+    toggle bindings are gone.
+  - Every toolbar/header button's `title`/`data-label`/`aria-label` reverted
+    to a plain description with no shortcut hint, except Bold and Italic
+    (kept, since those two were confirmed working).
+  - Working theory for why only Bold/Italic survived three attempts: Chrome
+    contenteditable regions have built-in native handling for Cmd+B/Cmd+I
+    regardless of any page-level JS listener, so those two never actually
+    depended on this app's own keydown handler reaching the DOM the way
+    every other command did. Not confirmed, just the most likely
+    explanation given the pattern.
+  - See [architecture.md](../architecture.md#keyboard-shortcuts) for the
+    consolidated writeup replacing the two sections the two earlier entries
+    added. Save/Save As/New note/Library remain fully usable via their
+    existing header icon buttons — only the keyboard-shortcut convenience
+    layer is gone, not the underlying functionality.
 - **Notes are saved to the library automatically — no explicit Save
   required** — shipped 2026-07-10, same day as the note library itself (see
   the entry directly below), superseding that entry's original "only on

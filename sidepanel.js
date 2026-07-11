@@ -2753,41 +2753,14 @@ document.addEventListener("click", (event) => {
   closeDatePicker();
 });
 
-// Global app shortcuts. Alt+<letter> combos deliberately avoid E/`/I/N/U —
-// on macOS, plain Option+{E,`,I,N,U} are reserved dead keys for typing
-// accented characters (é, è, î, ñ, ü); intercepting them here would break
-// accent input for anyone typing in a language that uses them. Cmd/Ctrl+Alt
-// combos aren't affected (dead-key composition only triggers on a lone
-// Option press), so New note uses that instead of a plain Alt+N.
+// No global app shortcuts (Save/Save As/New note/Library toggle) — removed
+// at the user's direction after every combo tried (Cmd/Ctrl+S,
+// Cmd/Ctrl+Shift+S, Cmd/Ctrl+Alt+N, Alt+L) failed to reach the page on
+// their real machine. See docs/plan/roadmap.md. Escape still closes the
+// date picker — original behavior, predates any of this.
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    if (libraryViewOpen) {
-      setLibraryViewOpen(false);
-      return;
-    }
-    if (pickerOpen) {
-      closeDatePicker();
-    }
-    return;
-  }
-  const key = event.key.toLowerCase();
-  if ((event.metaKey || event.ctrlKey) && !event.altKey && key === "s") {
-    event.preventDefault();
-    if (event.shiftKey) {
-      handleSaveAs();
-    } else {
-      handleSave();
-    }
-    return;
-  }
-  if ((event.metaKey || event.ctrlKey) && event.altKey && key === "n") {
-    event.preventDefault();
-    handleClear();
-    return;
-  }
-  if (event.altKey && !event.metaKey && !event.ctrlKey && key === "l") {
-    event.preventDefault();
-    setLibraryViewOpen(!libraryViewOpen);
+  if (event.key === "Escape" && pickerOpen) {
+    closeDatePicker();
   }
 });
 
@@ -2928,16 +2901,18 @@ window.JotDebug = {
   },
 };
 
-// Toolbar-command shortcuts, all Cmd/Ctrl+Alt+<letter> (except Bold/Italic,
-// which keep the universal Cmd/Ctrl+B/I with no Alt). An earlier version
-// used Cmd/Ctrl+Shift+<digit/;> combos (matching Google Docs' list
-// shortcuts) — reverted after real-world testing found actual collisions
-// a synthetic-KeyboardEvent test can't catch: Cmd+E was already bound to
-// something else entirely (opened another app), and Cmd+Shift+; never
-// reached the page at all. Cmd/Ctrl+Alt+<letter> is the same low-collision
-// pattern New note already uses successfully (Cmd/Ctrl+Alt+N) — letters
-// are also layout-safer than digit/punctuation combos, whose `key` value
-// changes under Shift (e.g. Shift+8 → "*") and varies by keyboard layout.
+// Only Bold/Italic have keyboard shortcuts. Every other toolbar-command
+// combo tried (Cmd/Ctrl+Shift+<digit/letter/;>, then Cmd/Ctrl+Alt+<letter>)
+// turned out to collide with something on the user's real machine — Cmd+E
+// got intercepted by another app, Cmd+Shift+; and the Cmd+Alt+<letter>
+// set never reached the page at all. Removed entirely at the user's
+// direction ("remove all shortcuts, they don't work") rather than attempt
+// a fourth combo; Bold/Italic are left in place since they were confirmed
+// working (likely because Chrome's contenteditable has built-in Cmd+B/
+// Cmd+I handling independent of this listener, unlike every other
+// command here). Don't reintroduce toolbar shortcuts without confirming
+// with a real keypress on a real machine first — see
+// docs/plan/roadmap.md.
 notesInput.addEventListener("keydown", (e) => {
   const mod = e.metaKey || e.ctrlKey;
   if (mod && !e.altKey && !e.shiftKey && e.key === "b") {
@@ -2947,34 +2922,6 @@ notesInput.addEventListener("keydown", (e) => {
   if (mod && !e.altKey && !e.shiftKey && e.key === "i") {
     e.preventDefault();
     applyFormat("italic");
-  }
-  if (mod && e.altKey && e.key.toLowerCase() === "h") {
-    e.preventDefault();
-    applyFormat("heading");
-  }
-  if (mod && e.altKey && e.key.toLowerCase() === "u") {
-    e.preventDefault();
-    applyFormat("ul");
-  }
-  if (mod && e.altKey && e.key.toLowerCase() === "o") {
-    e.preventDefault();
-    applyFormat("ol");
-  }
-  if (mod && e.altKey && e.key.toLowerCase() === "c") {
-    e.preventDefault();
-    applyFormat("code");
-  }
-  if (mod && e.altKey && e.key.toLowerCase() === "k") {
-    e.preventDefault();
-    applyFormat("codeblock");
-  }
-  if (mod && e.altKey && e.key.toLowerCase() === "m") {
-    e.preventDefault();
-    applyFormat("highlight");
-  }
-  if (mod && e.altKey && e.key.toLowerCase() === "t") {
-    e.preventDefault();
-    applyFormat("timestamp");
   }
   if (e.key === "Enter") {
     const selection = window.getSelection();

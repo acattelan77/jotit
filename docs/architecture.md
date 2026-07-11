@@ -113,48 +113,43 @@ keeps the [note library](#note-library-indexeddb) up to date — see
 [ADR-0007](decisions/0007-autosave-to-library.md); Save/Save As have no
 library-related effect at all.
 
-### Global keyboard shortcuts
+### Keyboard shortcuts
 
-Handled in a single `document`-level `keydown` listener (`sidepanel.js`,
-near the bottom, alongside the date-picker's own Escape handling it
-extends): Cmd/Ctrl+S (Save), Cmd/Ctrl+Shift+S (Save As), Cmd/Ctrl+Alt+N (New
-note), Alt+L (toggle library), Escape (closes the library view if open,
-otherwise the date picker if open). Added 2026-07-10 in response to a
-product usability review that flagged the complete absence of shortcuts
-beyond editor-local Bold/Italic as a top blocker for the meeting-notetaker
-persona.
+Only Bold (Cmd/Ctrl+B) and Italic (Cmd/Ctrl+I) have keyboard shortcuts,
+handled in the `notesInput` keydown listener. Escape closes the date
+picker if open (`document`-level listener, near the bottom of
+`sidepanel.js`) — this predates everything below and was never touched by
+it.
 
-New note deliberately uses Cmd/Ctrl+**Alt**+N rather than a plain Alt+N:
-on macOS, plain Option+{E,`,I,N,U} are reserved dead keys for composing
-accented characters (é, è, î, ñ, ü). A plain Alt+N global shortcut would
-silently break accent input for anyone typing in a language that uses one of
-those. Alt+L has no such collision (L isn't a dead key), so Library keeps
-the simpler binding. Don't add a new Alt+<letter> shortcut without checking
-it isn't one of E/`/I/N/U first.
+Two rounds of additional shortcuts were tried and removed the same day
+(2026-07-10), both times because real-world testing on an actual machine
+surfaced collisions a synthetic `KeyboardEvent` test cannot catch (a
+synthetic dispatch goes straight to the page's listeners, bypassing the
+real hardware/OS/browser capture chain a physical keypress goes through):
 
-### Toolbar-command keyboard shortcuts
+1. A first pass added global app shortcuts (Cmd/Ctrl+S Save, Cmd/Ctrl+Shift+S
+   Save As, Cmd/Ctrl+Alt+N New note, Alt+L Library, Escape also closing the
+   library) and toolbar-command shortcuts using Cmd/Ctrl+Shift+<digit/letter/;>
+   combos.
+2. Cmd+E (inline code) turned out to already be bound to something else on
+   the tester's machine (activated a different app instead of reaching the
+   page), and Cmd+Shift+; (timestamp) never reached the page at all. The
+   toolbar shortcuts were remapped to Cmd/Ctrl+Alt+<letter> instead (the
+   same pattern New note's Cmd/Ctrl+Alt+N used successfully) and verified
+   with real keypresses this time.
+3. Despite that, on further testing **every shortcut except Bold/Italic
+   still failed** — the global shortcuts and the remapped
+   Cmd/Ctrl+Alt+<letter> toolbar shortcuts alike. Removed entirely at the
+   user's explicit direction rather than attempt a third scheme. Bold/Italic
+   are believed to keep working because Chrome's contenteditable regions
+   have built-in Cmd+B/Cmd+I handling independent of any custom JS listener
+   — unlike every other command, which depended entirely on this app's own
+   keydown handler actually receiving the event.
 
-Separate from the global shortcuts above, and scoped to the `notesInput`
-keydown listener (same place Enter-in-code-block handling lives): Cmd/Ctrl+B
-(bold), Cmd/Ctrl+I (italic, both with no Alt), then Cmd/Ctrl+Alt+<letter>
-for everything else: H (heading), U (bullet list), O (numbered list), C
-(inline code), K (code block), M (highlight), T (insert timestamp). Every
-toolbar button's `title`/`data-label` shows its shortcut so it's
-discoverable on hover, not just from this doc.
-
-An earlier version used Cmd/Ctrl+Shift+<digit/letter/;> combos (Cmd+E for
-code, Cmd+Shift+8/7 matching Google Docs' list shortcuts, Cmd+Shift+; for
-timestamp) — reverted the same day after real-world testing surfaced
-exactly the class of bug a synthetic `KeyboardEvent` test can't catch: on
-the tester's actual machine, Cmd+E was already bound to something else
-(activated a different app instead of reaching the page at all), and
-Cmd+Shift+; never reached the page either. Cmd/Ctrl+Alt+<letter> is the
-same low-collision pattern New note already used successfully
-(Cmd/Ctrl+Alt+N); letters are also layout-safer than digit/punctuation
-combos, whose `key` value changes under Shift (e.g. Shift+8 → `"*"`, not
-`"8"`) and varies by keyboard layout — `event.code` checks (needed to work
-around that) are no longer necessary now that nothing here is
-digit/punctuation-based.
+See [roadmap.md](plan/roadmap.md) for the full history. **Don't
+reintroduce app-level or toolbar-command keyboard shortcuts without
+verifying with a real keypress in a real browser first** — a script-only
+verification already produced two false "it works" signals in a row here.
 
 ## Data model
 

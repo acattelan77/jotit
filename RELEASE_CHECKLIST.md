@@ -19,20 +19,19 @@
   numbered list, inline code, code block, highlight, and timestamp. Confirm
   there is no Link button (removed to keep the toolbar from overflowing at
   the panel's real width).
-- [ ] Hover each toolbar button and confirm the tooltip shows its keyboard
-  shortcut; confirm every shortcut (Cmd/Ctrl+B/I, Cmd/Ctrl+Alt+H/U/O/C/K/M/T)
-  actually triggers that formatting action, tested with real keypresses —
-  not just a script — since real OS/app-level shortcut collisions (already
-  hit once with Cmd+E and Cmd+Shift+;) can't be caught any other way.
+- [ ] Confirm only Bold and Italic toolbar buttons show a keyboard shortcut
+  on hover (Cmd/Ctrl+B, Cmd/Ctrl+I) and only those two actually work;
+  confirm no other toolbar button, and no header button (New/Save/Save
+  As/Library), responds to any keyboard shortcut — all keyboard shortcuts
+  beyond Bold/Italic were removed after repeated real-world collisions, see
+  [docs/architecture.md](docs/architecture.md#keyboard-shortcuts).
 - [ ] Paste plain multi-line text into the editor and confirm it inserts as
   normal prose (not a code block); confirm pasting into an existing code
   block still appends inline.
 - [ ] Confirm the first-run onboarding hint appears once, dismisses
   permanently, and does not reappear after reloading the panel.
-- [ ] Test each global shortcut: Cmd/Ctrl+S (Save, no native "Save Page As"
-  dialog appears), Cmd/Ctrl+Shift+S (Save As), Cmd/Ctrl+Alt+N (New note),
-  Alt+L (toggle Library), Escape (closes the library, then the date picker,
-  in that priority order).
+- [ ] Confirm Escape closes the date picker when it's open, and does
+  nothing else.
 - [ ] Confirm the panel toolbar does not overflow or clip any icon at the
   real side-panel width (~380px), not just at a wide test-window width.
 - [ ] Select text on a webpage while the panel is open and confirm the

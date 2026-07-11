@@ -14,19 +14,16 @@ highlight (execCommand's support for these is inconsistent or nonexistent
 across browsers, hence the manual handling). No toolbar link-insert control
 — see [Links](#links) below.
 
-Editor-local keyboard shortcuts, every one shown in its toolbar button's
-hover tooltip: Cmd/Ctrl+B (bold), Cmd/Ctrl+I (italic), and
-Cmd/Ctrl+Alt+<letter> for the rest — H (heading), U (bullet list), O
-(numbered list), C (inline code), K (code block), M (highlight), T (insert
-timestamp). See [architecture.md](../architecture.md#toolbar-command-keyboard-shortcuts)
-for why this scheme (not Cmd/Ctrl+Shift+<digit/letter/;>) — a real-world
-collision (Cmd+E already bound to something else on the tester's machine)
-that no amount of synthetic-event testing caught. Toolbar button
-active-state reflects current selection formatting via
-`updateToolbarState()`. Panel-wide shortcuts (Save, Save As, New note,
-Library toggle, Escape) are handled globally, not per-editor — see
-[architecture.md](../architecture.md#global-keyboard-shortcuts) and
-[architecture.md](../architecture.md#toolbar-command-keyboard-shortcuts).
+**Only Bold (Cmd/Ctrl+B) and Italic (Cmd/Ctrl+I) have keyboard shortcuts.**
+Every other toolbar command is mouse/tap-only. Two rounds of additional
+shortcuts (first Cmd/Ctrl+Shift+<digit/letter/;>, then
+Cmd/Ctrl+Alt+<letter>) were tried and removed the same day
+(2026-07-10) after real-world testing found they didn't reliably reach the
+page on the user's actual machine — see
+[architecture.md](../architecture.md#keyboard-shortcuts) for the full
+history. Don't reintroduce toolbar shortcuts without verifying with a real
+keypress first. Toolbar button active-state reflects current selection
+formatting via `updateToolbarState()`.
 
 ### Timestamp
 

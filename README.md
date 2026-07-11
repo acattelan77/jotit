@@ -14,8 +14,8 @@ window, and exports clean Markdown files when you are done.
 - Includes date and time controls for the note.
 - Supports basic rich-text formatting: bold, italic, heading, bullet list,
   numbered list, inline code, code block, highlight, and a one-click
-  timestamp insert — every formatting command has a keyboard shortcut shown
-  on hover.
+  timestamp insert. Bold and italic have keyboard shortcuts (Cmd/Ctrl+B,
+  Cmd/Ctrl+I); other formatting commands are toolbar-only.
 - Detects selected page text while the side panel or detached window is open and
   offers an explicit **Add selection** action.
 - Supports images explicitly pasted from the clipboard, including images copied
@@ -26,10 +26,6 @@ window, and exports clean Markdown files when you are done.
   as you write — no explicit save action required. Browse, search, sort,
   pin, filter by site, reopen, export, delete (individually or in bulk), or
   import a previously-exported file, all from the library view.
-- Keyboard shortcuts for the actions you'll reach for most: Cmd/Ctrl+S
-  (Save), Cmd/Ctrl+Shift+S (Save As), Cmd/Ctrl+Alt+N (New note), Alt+L
-  (Library), Escape (close the library), plus a shortcut for every
-  formatting command in the toolbar.
 - Exports notes as `.md` files through Chrome Downloads, with a Save As option.
   Notes with images are exported as a folder containing the note and an
   `attachments/` directory.
@@ -86,8 +82,8 @@ Requires Chrome 114 or newer.
    export-only — the note is already kept in the library automatically as you
    type, whether or not you ever click Save.
 7. Use **New note** to clear the current draft and start fresh.
-8. Click the library icon in the header (or press Alt+L) to browse every
-   note you've written. Search by title, body, or visited page; sort by
+8. Click the library icon in the header to browse every note you've
+   written. Search by title, body, or visited page; sort by
    recently updated, recently created, or title; filter to notes with a
    visited page on the site you're currently on; pin the notes you return to
    often; click a note to reopen it in the editor; use the per-row Save

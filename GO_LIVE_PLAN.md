@@ -62,9 +62,11 @@ privacy disclosures, verified permissions, and a clean release package.
 - [ ] Confirm pasted plain text inserts as prose, not a code block, and that
   the toolbar has no Link button (removed to prevent overflow — see
   roadmap.md) while still fitting cleanly at the real ~380px panel width.
-- [ ] Confirm the global keyboard shortcuts (Cmd/Ctrl+S, Cmd/Ctrl+Shift+S,
-  Cmd/Ctrl+Alt+N, Alt+L, Escape), the per-command toolbar shortcuts (shown
-  on hover), and the first-run onboarding hint.
+- [ ] Confirm only Bold/Italic have keyboard shortcuts (Cmd/Ctrl+B/I) — no
+  other toolbar or header button responds to a shortcut, after repeated
+  real-world collisions removed everything else (see
+  docs/architecture.md#keyboard-shortcuts). Confirm the first-run
+  onboarding hint.
 - [ ] Confirm the current design system in light and dark mode.
 - [ ] Confirm there are no service-worker or side-panel console errors.
 
