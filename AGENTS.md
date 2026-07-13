@@ -19,7 +19,7 @@ JS codebase (no build step, no framework, no dependencies). See
 2. [`docs/architecture.md`](docs/architecture.md) — runtime contexts, message
    flows, data model. The system as it exists today.
 3. [`docs/glossary.md`](docs/glossary.md) — shared vocabulary and the
-   module-responsibility map for `sidepanel.js`. Use these terms; don't invent
+   side-panel module-responsibility map. Use these terms; don't invent
    new ones for the same concept.
 4. [`docs/plan/roadmap.md`](docs/plan/roadmap.md) — what's currently being
    worked on, what's next, and the known-issues backlog. This is the "what
@@ -46,7 +46,7 @@ JS codebase (no build step, no framework, no dependencies). See
   in the same commit. A code change that invalidates a doc without updating
   it is an incomplete change.
 - **Structural/architectural decisions get an ADR.** Introducing a build
-  step, changing the storage model, splitting `sidepanel.js` into modules,
+  step, changing the storage model, materially changing the module graph,
   adding a dependency, changing the message-passing protocol — write a new
   file in `docs/decisions/` (copy `docs/decisions/TEMPLATE.md`). Don't just
   do it and move on; the next agent needs to know it was deliberate and why.
@@ -58,8 +58,9 @@ JS codebase (no build step, no framework, no dependencies). See
   [`docs/handoffs/README.md`](docs/handoffs/README.md). This is what lets the
   next agent (possibly you, possibly not) resume without re-deriving context.
 - **Match existing conventions before introducing new ones.** This is a
-  single-file, vanilla-JS, no-build codebase on purpose (see
-  [ADR-0001](docs/decisions/0001-static-unbundled-extension.md)). Don't add a
+  vanilla-JS, native-module, no-build codebase on purpose (see
+  [ADR-0001](docs/decisions/0001-static-unbundled-extension.md) and
+  [ADR-0009](docs/decisions/0009-native-sidepanel-modules.md)). Don't add a
   bundler, a framework, or a package dependency without an ADR justifying the
   change in direction.
 - **Local-first, no telemetry, no external calls beyond what's needed for the
@@ -72,7 +73,8 @@ JS codebase (no build step, no framework, no dependencies). See
 | Concern | File |
 |---|---|
 | Service worker (background) | `background.js` |
-| Side panel UI + all app logic | `sidepanel.js`, `sidepanel.html`, `sidepanel.css` |
+| Side panel UI + coordination | `sidepanel.js`, `sidepanel.html`, `sidepanel.css` |
+| Side panel modules | `panel/` — state, storage, date picker, export service |
 | Content script (page selection capture) | `content-selection.js` |
 | Shared/pure helpers (filename, markdown conversion) | `lib/note-utils.js` |
 | Extension manifest | `manifest.json` |

@@ -196,6 +196,63 @@ describe("normalizeImageSrc", () => {
   });
 });
 
+describe("image export metadata", () => {
+  it("maps supported MIME types to canonical extensions", () => {
+    assert.equal(NoteUtils.getImageExtension("anything", "image/jpeg"), "jpg");
+    assert.equal(NoteUtils.getImageExtension("data:image/webp;base64,AAAA"), "webp");
+  });
+
+  it("uses a URL extension only when no supported MIME type is available", () => {
+    assert.equal(
+      NoteUtils.getImageExtension("https://example.com/photo.avif"),
+      "avif"
+    );
+    assert.equal(
+      NoteUtils.getImageExtension("https://example.com/photo.jpeg", "image/png"),
+      "png"
+    );
+  });
+});
+
+describe("buildLibraryEntry", () => {
+  it("preserves pin and creation metadata while updating note content", () => {
+    const result = NoteUtils.buildLibraryEntry({
+      id: "note-1",
+      now: 200,
+      existing: {
+        id: "note-1",
+        pinned: true,
+        createdAt: 100,
+        updatedAt: 150,
+      },
+      data: {
+        meetingName: "  Updated  ",
+        meetingDate: "2026-07-11T10:00",
+        notes: "Body",
+        pageHistory: [{ url: "https://example.com/" }],
+      },
+    });
+
+    assert.equal(result.title, "Updated");
+    assert.equal(result.createdAt, 100);
+    assert.equal(result.updatedAt, 200);
+    assert.equal(result.pinned, true);
+    assert.equal(result.notes, "Body");
+  });
+
+  it("creates defaults for a new entry", () => {
+    const result = NoteUtils.buildLibraryEntry({
+      id: "note-2",
+      now: 300,
+      data: { meetingName: "", notes: "" },
+    });
+    assert.equal(result.title, "Untitled note");
+    assert.equal(result.createdAt, 300);
+    assert.equal(result.updatedAt, 300);
+    assert.equal(result.pinned, false);
+  });
+});
+
 describe("markdownToHtml — pure regex, no DOM needed", () => {
   it("converts bold", () => {
     assert.equal(

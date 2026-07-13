@@ -2,14 +2,12 @@
 
 Source of truth for how Jot it! is actually built and how its pieces talk to
 each other. If code changes invalidate anything here, update this file in the
-same change (see [`AGENTS.md`](../AGENTS.md) ground rules). Line numbers are
-approximate as of the last edit to this doc — if they're off, trust the code
-and fix this file.
+same change (see [`AGENTS.md`](../AGENTS.md) ground rules).
 
 ## System shape
 
-Jot it! is a static, unbundled Chrome MV3 extension. No framework, no
-bundler, no npm dependencies (see
+Jot it! is a static, unbundled Chrome MV3 extension requiring Chrome 116+.
+It uses no framework, bundler, or npm dependencies (see
 [ADR-0001](decisions/0001-static-unbundled-extension.md)). Four distinct
 runtime contexts, none of which share memory — they only communicate via
 `chrome.runtime`/`chrome.tabs` message passing and `chrome.storage.local`.
@@ -17,7 +15,7 @@ runtime contexts, none of which share memory — they only communicate via
 | Context | File(s) | Lifecycle |
 |---|---|---|
 | Service worker (background) | `background.js` | Event-driven; Chrome can kill and respawn it at any time. Only `debugEnabled` survives respawn (reloaded from storage); `detachedWindows`, `openPanelTabs`, `debugLogs` are in-memory and lost. See [Known fragility](#known-fragility). |
-| Side panel document | `sidepanel.html`, `sidepanel.js`, `lib/note-utils.js` | Loaded either docked (`chrome.sidePanel`) or as a standalone popup window (`chrome.windows.create`) pointed at the same `sidepanel.html?standalone=1&...`. Same code, two presentation modes, branched via `isStandalone` (URL search param). |
+| Side panel document | `sidepanel.html`, `sidepanel.js`, `panel/*.mjs`, `lib/note-utils.js`, `note-library.js` | Loaded either docked (`chrome.sidePanel`) or as a standalone popup window (`chrome.windows.create`) pointed at the same `sidepanel.html?standalone=1&...`. `NoteUtils` and `NoteLibrary` are classic-script globals loaded before the module entry point; `sidepanel.js` and `panel/*.mjs` are native ES modules. The two presentation modes branch via `isStandalone` (URL search param). |
 | Content script | `content-selection.js` | Declared in `manifest.json` to run on all `http(s)` pages, `all_frames: true`, `document_idle`. Also injected on-demand by background via `chrome.scripting.executeScript` when a `PING_SELECTION` probe gets no response (handles pages loaded before install/update). |
 | Standalone window | (no separate file) | Not a traditional `default_popup` — the manifest declares none. The "standalone window" is a `chrome.windows.create({type:"popup"})` loading `sidepanel.html`, functionally a second presentation of the side panel document. |
 
@@ -29,21 +27,22 @@ types (all handled centrally in background.js):
 
 | Type | Sender → Receiver | Purpose |
 |---|---|---|
-| `DETACH_PANEL {tabId}` | panel → background | Disable docked panel for tab, tell content script to close its UI hint. |
 | `DETACH_AND_OPEN {tabId}` | panel → background | Full detach: disable docked panel, open standalone window. |
 | `REGISTER_DETACH_WINDOW {tabId, windowId}` | panel → background | Record tab↔window mapping for auto-reattach on window close. |
-| `PANEL_OPEN {tabId}` / `PANEL_OPEN_ACTIVE` / `PANEL_CLOSE {tabId}` | panel → background | Track which tabs have a visible panel (`openPanelTabs` Set); forwarded to the content script on that tab. |
-| `PANEL_STATE` | — | Defined in background.js but never sent by any current caller. Dead code — see [known issues](plan/roadmap.md). |
+| `PANEL_OPEN {tabId}` / `PANEL_OPEN_ACTIVE` / `PANEL_CLOSE {tabId}` | panel → background | Track which tabs have a visible panel (`openPanelTabs` Set). `PANEL_OPEN*` also flushes a command queued while the panel was opening. |
 | `PAGE_SELECTION_CANDIDATE {text, url, title}` | content script → background → panel | Background only re-broadcasts if the panel is actually visible for that tab (checks `openPanelTabs`/detached-window map); otherwise silently drops it. |
+| `RUN_PANEL_COMMAND {command}` | background → open panel | Forward a named `chrome.commands` shortcut to the open panel document. The panel accepts it only from the extension origin. |
 | `DEBUG_LOG` / `GET_DEBUG_LOGS` / `CLEAR_DEBUG_LOGS` | any → background | Debug utility channel, gated by `debugLogsEnabled` storage flag. |
 | `PING_SELECTION` | background → content script | Liveness probe used to decide whether to inject the content script on-demand. |
 
-**Trust boundary:** `DETACH_PANEL`, `DETACH_AND_OPEN`, `REGISTER_DETACH_WINDOW`,
-`PANEL_OPEN`, `PANEL_CLOSE`, and the `DEBUG_LOG*` family are only accepted
-from senders whose `sender.id === chrome.runtime.id` and whose URL is the
-extension's own origin — i.e., only the side panel document, not arbitrary
-web pages. `PAGE_SELECTION_CANDIDATE` is deliberately unrestricted since it
-legitimately originates from content scripts on arbitrary sites.
+**Trust boundary:** `DETACH_AND_OPEN`, `REGISTER_DETACH_WINDOW`,
+`PANEL_OPEN`, `PANEL_OPEN_ACTIVE`, `PANEL_CLOSE`, and the `DEBUG_LOG*` family are only accepted
+by background from senders whose `sender.id === chrome.runtime.id` and whose
+URL is the extension's own origin — i.e., only the side panel document, not
+arbitrary web pages. `RUN_PANEL_COMMAND` is likewise accepted by the panel
+only from the extension-origin service worker. `PAGE_SELECTION_CANDIDATE` is
+deliberately unrestricted since it legitimately originates from content
+scripts on arbitrary sites.
 
 ## Key flows
 
@@ -56,8 +55,8 @@ docked panel presentation visible while the user browses across tabs. If a
 Chromium variant rejects the window-scoped open, background falls back to a
 tab-scoped open; on continued failure (e.g. a competing sidebar in some
 Chromium variants), it opens a standalone window. On success: the active tab
-is added to `openPanelTabs`, `ensureSelectionScript(tabId)` injects the
-content script if needed, `PANEL_OPEN` is sent to that tab's content script.
+is added to `openPanelTabs` and `ensureSelectionScript(tabId)` injects the
+content script if needed.
 The panel document itself runs `init()` on load: restores
 draft/context/title-lock from storage, updates the title from the active tab
 only while the note is still empty/unstarted, and calls
@@ -66,8 +65,8 @@ only while the note is still empty/unstarted, and calls
 
 ### Detach → standalone window → reattach
 User clicks the detach button → panel sends `DETACH_AND_OPEN {tabId}` →
-background disables the docked panel for that tab, tells the content script
-to close its UI, opens `sidepanel.html?standalone=1&sourceTabId=<id>&...` as
+background disables the docked panel for that tab and opens
+`sidepanel.html?standalone=1&sourceTabId=<id>&...` as
 a popup window, and records the mapping in `detachedWindows`. The standalone
 document detects `isStandalone` from the URL and drives its title/URL updates
 off `sourceTabId` (via `chrome.tabs.get`/`onUpdated`) instead of querying the
@@ -90,11 +89,9 @@ block, at the last known caret position.
 
 ### Save / Save As (export)
 Entirely local to the panel document — no messaging involved. Both handlers:
-read form data, build a filename (`NoteUtils.buildFilename`), convert the
-editor's HTML to Markdown (`htmlToMarkdown`), build the full document
-(`buildMarkdown` / `buildYamlFrontmatter`), then rewrite embedded images into
-`attachments/<note>-image-N.<ext>` relative paths and collect attachment
-blobs (`buildObsidianImageExport`).
+read form data, then delegate deterministic Markdown/frontmatter, filename,
+image rewriting, and attachment collection to the export service in
+`panel/export-service.mjs`.
 
 - **Save** (`handleSave`): `chrome.downloads.download` with `saveAs:false`
   first; falls back to `saveAs:true` on error.
@@ -103,8 +100,8 @@ blobs (`buildObsidianImageExport`).
   otherwise falls back to `chrome.downloads.download` with
   `saveAs: !hasAttachments`.
 
-These two paths independently duplicate a fair amount of logic — see
-[known issues](plan/roadmap.md).
+Both handlers share `exportService.prepareNoteExport()`; only their
+disk-writing and fallback mechanisms differ.
 
 Every keystroke also independently autosaves the *draft* (not an export) to
 `chrome.storage.local["noteDraft"]` via a 300ms-debounced save — unrelated to
@@ -115,41 +112,21 @@ library-related effect at all.
 
 ### Keyboard shortcuts
 
-Only Bold (Cmd/Ctrl+B) and Italic (Cmd/Ctrl+I) have keyboard shortcuts,
-handled in the `notesInput` keydown listener. Escape closes the date
-picker if open (`document`-level listener, near the bottom of
-`sidepanel.js`) — this predates everything below and was never touched by
-it.
+Jot it! declares its shortcuts through Chrome's `commands` API, not a
+page-level `keydown` listener. That lets Chrome expose all stable commands in
+`chrome://extensions/shortcuts` and resolve extension conflicts itself. The
+four suggested defaults are Command/Ctrl+Shift+Y (Open Jot it!), U (New note),
+K (Export note), and L (Open library); all other commands begin unassigned and
+are user-configurable. They are browser-scoped, so they work while Chrome has
+focus. Open Jot it!, New note, and Open library open the panel if necessary;
+the remaining panel-local commands require it to already be open. See
+[keyboard-shortcuts.md](specs/keyboard-shortcuts.md) and
+[ADR-0008](decisions/0008-chrome-extension-commands.md).
 
-Two rounds of additional shortcuts were tried and removed the same day
-(2026-07-10), both times because real-world testing on an actual machine
-surfaced collisions a synthetic `KeyboardEvent` test cannot catch (a
-synthetic dispatch goes straight to the page's listeners, bypassing the
-real hardware/OS/browser capture chain a physical keypress goes through):
-
-1. A first pass added global app shortcuts (Cmd/Ctrl+S Save, Cmd/Ctrl+Shift+S
-   Save As, Cmd/Ctrl+Alt+N New note, Alt+L Library, Escape also closing the
-   library) and toolbar-command shortcuts using Cmd/Ctrl+Shift+<digit/letter/;>
-   combos.
-2. Cmd+E (inline code) turned out to already be bound to something else on
-   the tester's machine (activated a different app instead of reaching the
-   page), and Cmd+Shift+; (timestamp) never reached the page at all. The
-   toolbar shortcuts were remapped to Cmd/Ctrl+Alt+<letter> instead (the
-   same pattern New note's Cmd/Ctrl+Alt+N used successfully) and verified
-   with real keypresses this time.
-3. Despite that, on further testing **every shortcut except Bold/Italic
-   still failed** — the global shortcuts and the remapped
-   Cmd/Ctrl+Alt+<letter> toolbar shortcuts alike. Removed entirely at the
-   user's explicit direction rather than attempt a third scheme. Bold/Italic
-   are believed to keep working because Chrome's contenteditable regions
-   have built-in Cmd+B/Cmd+I handling independent of any custom JS listener
-   — unlike every other command, which depended entirely on this app's own
-   keydown handler actually receiving the event.
-
-See [roadmap.md](plan/roadmap.md) for the full history. **Don't
-reintroduce app-level or toolbar-command keyboard shortcuts without
-verifying with a real keypress in a real browser first** — a script-only
-verification already produced two false "it works" signals in a row here.
+Bold and Italic also retain their normal contenteditable Cmd/Ctrl+B/I behavior.
+Escape closes the date picker if open. The earlier page-level shortcut attempts
+remain historical context in the 2026-07-10 handoff entries; do not add new
+page-level shortcut handling.
 
 ## Data model
 
@@ -234,6 +211,7 @@ display-order preference, not an edit to the note. Pinned entries always
 render first in the library list regardless of the active sort mode; no new
 IndexedDB index was needed since the library re-sorts client-side over the
 already-loaded cache (see [note-library.md](specs/note-library.md)).
+Normal autosaves preserve the existing `pinned` field.
 
 - **Written by:** `saveNoteToLibrary()`, called from `saveDraft()` — the
   same debounced (300ms) autosave that writes `chrome.storage.local`'s
@@ -260,7 +238,7 @@ already-loaded cache (see [note-library.md](specs/note-library.md)).
   discarded, see ADR-0007), `renderLibraryList()` / `loadLibraryList()` (the
   list/search UI), `exportAllNotes()` (bulk export, reuses the normal
   per-note export path in a loop).
-- **`currentLibraryEntryId`** (`sidepanel.js` module state) tracks which
+- **`state.library.currentEntryId`** (`panel/state.mjs`) tracks which
   entry, if any, the open editor content corresponds to; persisted in the
   draft (`noteDraft.libraryEntryId`) so it survives a panel reload. Further
   autosaves update that same entry rather than creating a duplicate; "New
@@ -307,19 +285,25 @@ Filenames: `"YYYY-MM-DD - hHH:MM - <safe title>.md"`
 
 ## Module map
 
-`sidepanel.js` is a single ~2400-line file with no ES modules — see
-[`glossary.md`](glossary.md) for the full region-by-region responsibility
-map and line ranges. Read that before adding new top-level functions so new
-code lands in the right conceptual region instead of at the bottom of the
-file regardless of what it does.
+The side-panel module graph is intentionally shallow and one-directional:
+`sidepanel.js` imports `panel/*.mjs`; panel modules do not import the entry
+point or each other except for the date picker importing pure date helpers.
+See [ADR-0009](decisions/0009-native-sidepanel-modules.md).
 
-`note-library.js` is a second small standalone script (loaded before
-`sidepanel.js`, after `lib/note-utils.js`), exposing `window.NoteLibrary`.
-Unlike `lib/note-utils.js` it isn't dependency-free/portable-to-Node — it's
-a thin IndexedDB wrapper, browser-only by nature — so it lives at the repo
-root as its own file rather than in `lib/`, matching `background.js`/
-`content-selection.js`'s pattern of "one file per browser-API-bound
-concern" rather than being folded into the already-large `sidepanel.js`.
+| Module | Responsibility |
+|---|---|
+| `sidepanel.js` | Module entry point, DOM lookup, editor and library UI orchestration, panel lifecycle, message/command routing, and initialization. |
+| `panel/state.mjs` | The single nested mutable state shape for title, page, editor, library, and queued work. |
+| `panel/storage.mjs` | Promise wrappers for `chrome.storage.local` and the shared cancellable debounce helper. |
+| `panel/date-time.mjs` | Pure strict parsing and local date/time formatting. |
+| `panel/date-picker.mjs` | Date-picker state, rendering, keyboard/pointer commands, and picker-owned listeners. |
+| `panel/export-service.mjs` | Markdown/frontmatter and attachment package construction plus low-level download/File System Access adapters. |
+| `lib/note-utils.js` | Pure filename, URL, and Markdown conversion helpers exposed as the classic-script `window.NoteUtils` global. |
+| `note-library.js` | Browser-only IndexedDB wrapper exposed as the classic-script `window.NoteLibrary` global. |
+
+The classic-script globals are retained to keep Node tests and browser loading
+simple without a build step. New cohesive panel behavior should go in the
+module that owns it; coordination across features stays in `sidepanel.js`.
 
 ## Permissions (manifest.json)
 
@@ -341,8 +325,7 @@ Excluded from release packaging (see `RELEASE_CHECKLIST.md`).
 ## Known fragility
 
 See [`docs/plan/roadmap.md`](plan/roadmap.md) for the full, prioritized list
-(duplicated image-format constants, duplicated save/save-as logic,
-in-memory-only background state lost on service-worker eviction, hand-rolled
-Markdown converter, global mutable state in `sidepanel.js`, dead
-`PANEL_STATE` message type, no-op CI). That list is the working backlog —
+(in-memory-only background state lost on service-worker eviction, hand-rolled
+Markdown conversion/frontmatter, and manual version synchronization). That
+list is the working backlog —
 don't re-derive it from scratch, extend it.

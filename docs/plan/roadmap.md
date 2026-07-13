@@ -9,10 +9,10 @@ change.
 
 ## Now
 
-*(Unit tests for `lib/note-utils.js` and the note library are both done —
-see Resolved below. Nothing actively in progress. Syntax highlighting and
-the tech-debt backlog are on hold per the product owner's direction — don't
-pick those up without being asked.)*
+*(Nothing actively in progress. The native side-panel module refactor is
+complete; see Resolved below. Syntax highlighting and the remaining tech-debt
+backlog are on hold per the product owner's direction — don't pick those up
+without being asked.)*
 
 ## Next (suggested, unordered — pick based on what you're actually asked to
 do; this isn't a mandate)
@@ -52,72 +52,55 @@ each — not by strict priority. When you fix one, move it to a "Resolved"
 section below with the date and a one-line pointer to the fix, don't just
 delete it (keeps the history legible instead of silently vanishing).
 
-1. **Duplicated image-format constants** — `SUPPORTED_IMAGE_TYPES`/
-   `SUPPORTED_IMAGE_EXTENSIONS`/`getImageExtensionFromUrl` defined
-   independently in `lib/note-utils.js` and `sidepanel.js` with different
-   shapes (Set vs. Map). See
-   [rich-text-editor.md](../specs/rich-text-editor.md#images). Fix: single
-   definition in `lib/note-utils.js`, `sidepanel.js` imports/reuses it.
-2. **Duplicated Save/Save As logic** — `handleSave`/`handleSaveAs` in
-   `sidepanel.js` share ~120 lines of near-identical logic with subtly
-   different fallback tiers. See
-   [export-and-save.md](../specs/export-and-save.md). Fix: extract the
-   shared build-document-and-attachments logic into one function, leave only
-   the actual write-to-disk mechanism (`downloads` vs. directory picker)
-   distinct per handler.
-3. **In-memory-only background state lost on service-worker eviction** —
+1. **In-memory-only background state lost on service-worker eviction** —
    `detachedWindows`, `openPanelTabs`, `debugLogs` in `background.js`. See
    [ADR-0002](../decisions/0002-storage-local-shared-state.md) and
    [panel-detach-reattach.md](../specs/panel-detach-reattach.md#known-fragility).
    Fix candidate: `chrome.storage.session`.
-4. **Global mutable state in `sidepanel.js`** — ~15 top-level `let` bindings
-   closed over by dozens of functions, no encapsulation. See
-   [ADR-0005](../decisions/0005-single-file-sidepanel-controller.md). Not an
-   urgent fix on its own; watch for it causing actual bugs (a new code path
-   forgetting to update related state) before undertaking a broader refactor.
-5. **Hand-rolled YAML frontmatter serialization** (`toYamlString` is just
+2. **Hand-rolled YAML frontmatter serialization** (`toYamlString` is just
    `JSON.stringify`) — fine for the current flat-scalar/flat-list usage, will
    break silently if a future field needs real structure. See
    [ADR-0003](../decisions/0003-hand-rolled-markdown-conversion.md).
-6. **Regex-based Markdown↔HTML converter** — only handles the exact subset
+3. **Regex-based Markdown↔HTML converter** — only handles the exact subset
    the editor's own toolbar produces; fragile against hand-edited or
    externally-authored Markdown re-imported into the app. See
    [ADR-0003](../decisions/0003-hand-rolled-markdown-conversion.md).
-7. **`PANEL_STATE` message type is dead code** — defined in `background.js`,
-   never sent by any current caller. Either wire it up or remove it; leaving
-   it is a small but real source of confusion about what the actual message
-   protocol is (see [`../architecture.md`](../architecture.md#message-passing)).
-8. **Version string kept in sync by hand in three places** —
+4. **Version string kept in sync by hand in three places** —
    `package.json`, `manifest.json`, and a hardcoded `v. 1.3.0` string in
    `sidepanel.html`. No build step enforces consistency (see
    `GO_LIVE_PLAN.md`/`RELEASE_CHECKLIST.md`, which already call this out as a
    manual release step). Low priority unless it starts causing actual
    release mistakes.
-9. **DOM lookups by ID with no failure signal** — all top-level
-   `getElementById` consts in `sidepanel.js`, mostly accessed via optional
-   chaining, so a renamed `id` in `sidepanel.html` fails silently (element
-   becomes `null`, downstream code just no-ops) instead of erroring loudly.
-   Worth a lint rule or startup assertion if this ever causes a real bug
-   during a refactor.
-10. **Title auto-fill can race the async draft restore on load** —
-    discovered 2026-07-10 while verifying [ADR-0007](../decisions/0007-autosave-to-library.md)
-    in a real browser, not fixed (out of scope for that work). `init()`
-    restores the draft's title asynchronously (`await storageGetMultiple(...)`)
-    before setting `userEditedTitle` to protect it from auto-fill; the
-    `window` `"focus"` listener (`sidepanel.js`, near the bottom) also calls
-    `updateTitleFromActiveTab()`, and if that event fires during the async
-    gap — observed reliably when reloading a full page in a test harness,
-    plausibility in the real docked side-panel context not yet checked —
-    `userEditedTitle` is still at its module-load default (`false`), so the
-    active tab's title can overwrite a just-restored one before `init()`
-    ever gets to protect it. Needs its own investigation (possibly: set
-    `userEditedTitle` synchronously from a value cached before the `await`,
-    or guard the focus listener until `init()` has completed) — don't
-    attempt a fix inline as part of unrelated work without understanding
-    the full auto-fill state machine first.
-
 ## Resolved
 
+- **Native side-panel modules and encapsulated state** — fixed 2026-07-11.
+  `sidepanel.js` is now a native-module entry point over cohesive state,
+  storage, date/time, date-picker, and export-service modules. The extension
+  remains static, dependency-free, and unbundled; module behavior and import
+  integrity are covered by Node tests. This supersedes the former single-file
+  decision; see [ADR-0009](../decisions/0009-native-sidepanel-modules.md).
+
+- **Repository review correctness and debt fixes** — fixed 2026-07-11.
+  Autosaves are serialized, persist a newly-created library id back into the
+  draft, preserve pin metadata, and retain image-only notes. Per-note export
+  history is now explicit rather than temporarily swapping live global state;
+  remote images are fetched once and use their validated MIME extension.
+  Image metadata and export-package construction are shared, the dead
+  `PANEL_STATE`/`DETACH_PANEL` paths and no-op content-script lifecycle sends
+  are removed, the title-restore focus race is guarded until initialization,
+  and repository-integrity tests now catch missing DOM ids and manifest files.
+
+- **Chrome-managed keyboard shortcuts for stable Jot it! commands** — shipped
+  2026-07-11. The extension now declares four suggested defaults (Open, New,
+  Export, Library) and exposes the remaining stable toolbar, date, selection,
+  and library actions as user-assignable commands in
+  `chrome://extensions/shortcuts`. The service worker forwards commands to an
+  already-open panel rather than relying on the page-level `keydown` layer
+  that repeatedly failed on the product owner's real machine. File import and
+  per-library-row actions remain direct UI controls because they require a
+  file-picker gesture or a specific row target. See
+  [keyboard-shortcuts.md](../specs/keyboard-shortcuts.md) and
+  [ADR-0008](../decisions/0008-chrome-extension-commands.md).
 - **Usability-review fixes: onboarding hint, paste default, keyboard
   shortcuts, and library pin/sort/filter/multi-select/import** —
   shipped 2026-07-10, following a structured product usability review (five

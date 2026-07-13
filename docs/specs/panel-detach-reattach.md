@@ -10,8 +10,8 @@ another window — and bring it back later without losing draft state.
 
 - **Detach:** clicking the detach control sends `DETACH_AND_OPEN {tabId}`.
   Background disables the docked panel for that tab
-  (`sidePanel.setOptions({enabled:false})`), tells the content script to
-  close its UI hint, and opens a `chrome.windows.create({type:"popup"})`
+  (`sidePanel.setOptions({enabled:false})`) and opens a
+  `chrome.windows.create({type:"popup"})`
   window at `sidepanel.html?standalone=1&sourceTabId=<id>&sourceTitle=...&sourceUrl=...`.
 - **Standalone document behavior:** detects `isStandalone` from the URL
   params. Title/URL auto-fill and tab-change listeners key off

@@ -1,6 +1,6 @@
 # 0005. Single-file `sidepanel.js` controller instead of split modules
 
-Status: Accepted
+Status: Superseded by [ADR-0009](0009-native-sidepanel-modules.md)
 Date: 2026-07-09 (retroactively documented)
 
 ## Context
@@ -11,8 +11,9 @@ formatting, image handling, Markdown/YAML export, draft persistence,
 save/save-as, incoming-selection handling, tab listeners, and a full
 date/time picker — all as top-level functions and `let`/`const` bindings in
 one file, with over 30 `document.getElementById` globals at the top (see
-[`docs/glossary.md`](../glossary.md#sidepaneljs-region-map) for the region
-map). This is a direct consequence of
+the historical region map that was replaced by the current
+[`docs/glossary.md`](../glossary.md#side-panel-module-map). This was treated as
+a direct consequence of
 [ADR-0001](0001-static-unbundled-extension.md): no bundler means no ES
 module graph without extra script tags and CSP considerations, and no
 build step to enforce module boundaries even if `type="module"` were used.
@@ -22,6 +23,10 @@ build step to enforce module boundaries even if `type="module"` were used.
 Keep `sidepanel.js` as one file, organized into clearly delimited regions
 (see `docs/glossary.md`) rather than splitting into multiple script files or
 ES modules, for now.
+
+This temporary decision was superseded on 2026-07-11 after the coupling risks
+described below caused concrete state and export bugs. See
+[ADR-0009](0009-native-sidepanel-modules.md).
 
 ## Consequences
 

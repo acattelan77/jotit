@@ -19,12 +19,12 @@
   numbered list, inline code, code block, highlight, and timestamp. Confirm
   there is no Link button (removed to keep the toolbar from overflowing at
   the panel's real width).
-- [ ] Confirm only Bold and Italic toolbar buttons show a keyboard shortcut
-  on hover (Cmd/Ctrl+B, Cmd/Ctrl+I) and only those two actually work;
-  confirm no other toolbar button, and no header button (New/Save/Save
-  As/Library), responds to any keyboard shortcut — all keyboard shortcuts
-  beyond Bold/Italic were removed after repeated real-world collisions, see
-  [docs/architecture.md](docs/architecture.md#keyboard-shortcuts).
+- [ ] Open `chrome://extensions/shortcuts` and confirm every Jot it! command
+  is listed. Confirm the four suggested defaults are assigned when not in
+  conflict, then assign and real-keypress-test at least one formatting, date,
+  and library command. Confirm New note and Open library open the panel when
+  needed, while contextual commands with no open panel are no-ops. See
+  [docs/specs/keyboard-shortcuts.md](docs/specs/keyboard-shortcuts.md).
 - [ ] Paste plain multi-line text into the editor and confirm it inserts as
   normal prose (not a code block); confirm pasting into an existing code
   block still appends inline.

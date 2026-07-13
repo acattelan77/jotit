@@ -1,3 +1,9 @@
+import { createDatePicker } from "./panel/date-picker.mjs";
+import { pad2, toLocalDateTimeValue } from "./panel/date-time.mjs";
+import { createExportService } from "./panel/export-service.mjs";
+import { createPanelState } from "./panel/state.mjs";
+import { createStorage, debounce } from "./panel/storage.mjs";
+
 const STORAGE_KEY = "noteDraft";
 const meetingNameInput = document.getElementById("meetingName");
 const titleLockButton = document.getElementById("titleLockButton");
@@ -64,13 +70,12 @@ if (!NoteLibrary) {
 }
 
 const {
-  toLocalDateTimeValue,
   formatDateTime,
   sanitizeMeetingName,
-  slugify,
-  buildFilename,
   normalizeUrl,
   normalizeImageSrc,
+  SUPPORTED_IMAGE_TYPES,
+  buildLibraryEntry,
   htmlToMarkdown,
   markdownToHtml,
   getActiveTab,
@@ -80,57 +85,16 @@ const DEBUG_KEY = "debugLogsEnabled";
 const TITLE_LOCK_KEY = "titleLockEnabled";
 const ONBOARDING_HINT_KEY = "onboardingHintDismissed";
 const MAX_PASTED_IMAGE_BYTES = 8 * 1024 * 1024;
-const MAX_EXPORTED_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGES_PER_PASTE = 8;
-const SUPPORTED_IMAGE_TYPES = new Map([
-  ["image/png", "png"],
-  ["image/jpeg", "jpg"],
-  ["image/gif", "gif"],
-  ["image/webp", "webp"],
-  ["image/avif", "avif"],
-]);
-const SUPPORTED_IMAGE_EXTENSIONS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "avif",
-]);
-const userAgent = navigator.userAgent || "";
-const chromeVersionMatch = userAgent.match(/\bChrome\/(\d+)\./i);
-const chromeMajorVersion = chromeVersionMatch
-  ? Number.parseInt(chromeVersionMatch[1], 10)
-  : null;
-const isMacOs = /\bMacintosh\b|\bMac OS X\b/i.test(userAgent);
-
-let statusTimer;
-let toastTimer;
-let lastToastAt = 0;
-let lastAutoTitle = "";
-let currentPageTitle = "";
-let userEditedTitle = false;
-let lastAutoTabId = null;
-let lastAutoTabUrl = "";
-let pickerOpen = false;
-let pickerMonth = null;
-let currentPageUrl = "";
-let panelTabId = null;
-let lastNotesRange = null;
-let lastNotesInserted = { text: "", url: "" };
-let lastNotesInsertedAt = 0;
-let pendingPageSelection = null;
-let lastCaretOffset = null;
-let pageHistory = [];
-let currentLibraryEntryId = null;
-let libraryViewOpen = false;
-let libraryEntriesCache = [];
-let librarySortMode = "updated";
-let libraryFilterThisSite = false;
-let libraryMultiSelectMode = false;
-const librarySelectedIds = new Set();
-let debugEnabled = false;
-let titleLocked = false;
+const state = createPanelState();
+const storage = createStorage(
+  chrome.storage.local,
+  () => chrome.runtime.lastError || null
+);
+const storageGet = storage.get;
+const storageGetMultiple = storage.get;
+const storageSet = storage.set;
+const storageRemove = storage.remove;
 const urlParams = new URLSearchParams(window.location.search);
 const isStandalone = urlParams.get("standalone") === "1";
 const sourceTabIdParam = Number(urlParams.get("sourceTabId"));
@@ -153,15 +117,15 @@ const showToast = (
 ) => {
   if (!statusMessage) return;
   const now = Date.now();
-  if (minIntervalMs && now - lastToastAt < minIntervalMs) return;
-  lastToastAt = now;
-  window.clearTimeout(toastTimer);
+  if (minIntervalMs && now - state.lastToastAt < minIntervalMs) return;
+  state.lastToastAt = now;
+  window.clearTimeout(state.toastTimer);
   statusMessage.textContent = message || "";
   statusMessage.classList.toggle("is-visible", Boolean(message));
   statusMessage.classList.toggle("is-error", variant === "error");
   statusMessage.classList.toggle("is-ambient", variant === "ambient");
   if (timeoutMs > 0) {
-    toastTimer = window.setTimeout(() => {
+    state.toastTimer = window.setTimeout(() => {
       if (statusMessage.textContent === message) {
         statusMessage.classList.remove("is-visible");
         window.setTimeout(() => {
@@ -177,7 +141,7 @@ const showToast = (
 };
 
 const debugLog = (message, data = {}) => {
-  if (!debugEnabled) return;
+  if (!state.debugEnabled) return;
   try {
     console.log("[Jot it][panel]", message, data);
     chrome.runtime.sendMessage({
@@ -194,17 +158,17 @@ const debugLog = (message, data = {}) => {
 const loadDebugFlag = () => {
   chrome.storage.local.get(DEBUG_KEY, (result) => {
     if (chrome.runtime.lastError) return;
-    debugEnabled = Boolean(result?.[DEBUG_KEY]);
+    state.debugEnabled = Boolean(result?.[DEBUG_KEY]);
   });
 };
 
 const updateTitleLockButton = () => {
   if (!titleLockButton) return;
-  titleLockButton.classList.toggle("is-locked", titleLocked);
-  const label = titleLocked ? "Unlock context title" : "Lock context title";
+  titleLockButton.classList.toggle("is-locked", state.title.locked);
+  const label = state.title.locked ? "Unlock context title" : "Lock context title";
   titleLockButton.setAttribute("aria-label", label);
   titleLockButton.setAttribute("title", label);
-  titleLockButton.dataset.label = titleLocked ? "Unlock" : "Lock";
+  titleLockButton.dataset.label = state.title.locked ? "Unlock" : "Lock";
 };
 
 const setStatus = (message, timeoutMs = 0) => {
@@ -216,66 +180,14 @@ const reportError = (message, error) => {
   showToast(message, { timeoutMs: 5000, variant: "error" });
 };
 
-const storageGet = (key) =>
-  new Promise((resolve, reject) => {
-    chrome.storage.local.get(key, (result) => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve(result);
-    });
-  });
-
-const storageGetMultiple = (keys) =>
-  new Promise((resolve, reject) => {
-    chrome.storage.local.get(keys, (result) => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve(result || {});
-    });
-  });
-
-const storageSet = (data) =>
-  new Promise((resolve, reject) => {
-    chrome.storage.local.set(data, () => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve();
-    });
-  });
-
 const setTitleLocked = (locked, { persist = true } = {}) => {
   const nextValue = Boolean(locked);
-  if (titleLocked === nextValue) return;
-  titleLocked = nextValue;
+  if (state.title.locked === nextValue) return;
+  state.title.locked = nextValue;
   updateTitleLockButton();
   if (persist) {
-    storageSet({ [TITLE_LOCK_KEY]: titleLocked }).catch(() => {});
+    storageSet({ [TITLE_LOCK_KEY]: state.title.locked }).catch(() => {});
   }
-};
-
-const storageRemove = (key) =>
-  new Promise((resolve, reject) => {
-    chrome.storage.local.remove(key, () => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-        return;
-      }
-      resolve();
-    });
-  });
-
-const debounce = (fn, wait = 250) => {
-  let timeoutId;
-  return (...args) => {
-    window.clearTimeout(timeoutId);
-    timeoutId = window.setTimeout(() => fn(...args), wait);
-  };
 };
 
 const getSelectionPreviewText = (text) => {
@@ -287,7 +199,7 @@ const getSelectionPreviewText = (text) => {
 };
 
 const clearPendingPageSelection = () => {
-  pendingPageSelection = null;
+  state.editor.pendingSelection = null;
   if (selectionCapture) {
     selectionCapture.hidden = true;
   }
@@ -299,24 +211,20 @@ const clearPendingPageSelection = () => {
 const showPendingPageSelection = (selection) => {
   const preview = getSelectionPreviewText(selection?.text || "");
   if (!preview || !selectionCapture || !selectionPreview) return;
-  pendingPageSelection = selection;
+  state.editor.pendingSelection = selection;
   selectionPreview.textContent = preview;
   selectionCapture.hidden = false;
 };
-
-
-const storageState = { refreshed: {} };
-
 if (chrome?.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     if (Object.prototype.hasOwnProperty.call(changes, DEBUG_KEY)) {
-      debugEnabled = Boolean(changes[DEBUG_KEY].newValue);
+      state.debugEnabled = Boolean(changes[DEBUG_KEY].newValue);
     }
     if (Object.prototype.hasOwnProperty.call(changes, TITLE_LOCK_KEY)) {
-      titleLocked = Boolean(changes[TITLE_LOCK_KEY].newValue);
+      state.title.locked = Boolean(changes[TITLE_LOCK_KEY].newValue);
       updateTitleLockButton();
-      storageState.refreshed[TITLE_LOCK_KEY] = true;
+      state.storage.refreshed[TITLE_LOCK_KEY] = true;
     }
   });
 }
@@ -325,8 +233,8 @@ loadDebugFlag();
 debugLog("panel initialized");
 
 const getCurrentHost = () => {
-  if (!currentPageUrl) return null;
-  const normalized = normalizeUrl(currentPageUrl) || currentPageUrl;
+  if (!state.page.currentUrl) return null;
+  const normalized = normalizeUrl(state.page.currentUrl) || state.page.currentUrl;
   try {
     return new URL(normalized).hostname;
   } catch (error) {
@@ -339,28 +247,17 @@ const recordPageVisit = (url, title) => {
   if (!normalized) return;
   const safeTitle =
     typeof title === "string" && title.trim() ? title.trim() : normalized;
-  const lastEntry = pageHistory[pageHistory.length - 1];
+  const lastEntry = state.page.history[state.page.history.length - 1];
   if (lastEntry?.url === normalized) {
     lastEntry.title = safeTitle;
     return;
   }
-  if (pageHistory.some((entry) => entry.url === normalized)) return;
-  pageHistory.push({ url: normalized, title: safeTitle, visitedAt: Date.now() });
-  if (pageHistory.length > 100) {
-    pageHistory = pageHistory.slice(-100);
+  if (state.page.history.some((entry) => entry.url === normalized)) return;
+  state.page.history.push({ url: normalized, title: safeTitle, visitedAt: Date.now() });
+  if (state.page.history.length > 100) {
+    state.page.history = state.page.history.slice(-100);
   }
 };
-
-const getVisitedPagesForFrontmatter = () =>
-  pageHistory
-    .filter((entry) => normalizeUrl(entry.url) === entry.url)
-    .map((entry) => ({
-      title:
-        typeof entry.title === "string" && entry.title.trim()
-          ? entry.title.trim()
-          : entry.url,
-      url: entry.url,
-    }));
 
 const normalizePageHistory = (entries) => {
   if (!Array.isArray(entries)) return [];
@@ -379,6 +276,17 @@ const normalizePageHistory = (entries) => {
   });
   return normalizedEntries.slice(-100);
 };
+
+const {
+  downloadImageAttachments,
+  downloadMarkdown,
+  prepareNoteExport,
+  writeAttachmentsToDirectory,
+  writeTextFile,
+} = createExportService({
+  noteUtils: NoteUtils,
+  normalizePageHistory,
+});
 
 const removeLegacySourceLines = () => {
   const candidates = notesInput.querySelectorAll("p");
@@ -424,7 +332,7 @@ const restoreCaretOffset = (targetOffset) => {
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
-      lastNotesRange = range.cloneRange();
+      state.editor.lastRange = range.cloneRange();
       return;
     }
     currentOffset = nextOffset;
@@ -436,23 +344,11 @@ const restoreCaretOffset = (targetOffset) => {
   const selection = window.getSelection();
   selection.removeAllRanges();
   selection.addRange(range);
-  lastNotesRange = range.cloneRange();
+  state.editor.lastRange = range.cloneRange();
   if (Number.isInteger(targetOffset)) {
-    lastCaretOffset = targetOffset;
+    state.editor.lastCaretOffset = targetOffset;
   }
 };
-
-const createPopupWindow = (options) =>
-  new Promise((resolve) => {
-    chrome.windows.create(options, (createdWindow) => {
-      if (chrome.runtime.lastError) {
-        reportError("Couldn't open detached window.", chrome.runtime.lastError);
-        resolve(null);
-        return;
-      }
-      resolve(createdWindow || null);
-    });
-  });
 
 const ensureSelectionInNotes = () => {
   const selection = window.getSelection();
@@ -481,7 +377,7 @@ const updateEditorStackFocus = () => {
 };
 
 const shouldAutoUpdateTitle = () => {
-  if (titleLocked || userEditedTitle) return false;
+  if (state.title.locked || state.title.userEdited) return false;
   return !hasNoteContent() || !meetingNameInput.value.trim();
 };
 
@@ -500,14 +396,14 @@ const updateTitleFromActiveTab = async () => {
         });
         if (tab) {
           const title = typeof tab.title === "string" ? tab.title.trim() : "";
-          currentPageTitle = title;
+          state.title.currentPage = title;
           if (shouldAutoUpdateTitle()) {
             meetingNameInput.value = title;
-            lastAutoTitle = title;
-            userEditedTitle = false;
+            state.title.lastAutomatic = title;
+            state.title.userEdited = false;
           }
-          currentPageUrl = typeof tab.url === "string" ? tab.url : "";
-          recordPageVisit(currentPageUrl, currentPageTitle);
+          state.page.currentUrl = typeof tab.url === "string" ? tab.url : "";
+          recordPageVisit(state.page.currentUrl, state.title.currentPage);
           debouncedSaveDraft();
           return;
         }
@@ -516,16 +412,16 @@ const updateTitleFromActiveTab = async () => {
       }
     }
     if (sourceTitleParam) {
-      currentPageTitle = sourceTitleParam;
+      state.title.currentPage = sourceTitleParam;
       if (shouldAutoUpdateTitle()) {
         meetingNameInput.value = sourceTitleParam;
-        lastAutoTitle = sourceTitleParam;
-        userEditedTitle = false;
+        state.title.lastAutomatic = sourceTitleParam;
+        state.title.userEdited = false;
       }
       if (sourceUrlParam) {
-        currentPageUrl = sourceUrlParam;
+        state.page.currentUrl = sourceUrlParam;
       }
-      recordPageVisit(currentPageUrl, currentPageTitle);
+      recordPageVisit(state.page.currentUrl, state.title.currentPage);
       debouncedSaveDraft();
       return;
     }
@@ -533,24 +429,24 @@ const updateTitleFromActiveTab = async () => {
   const tab = await getActiveTab();
   if (!tab) return;
   const title = typeof tab.title === "string" ? tab.title.trim() : "";
-  currentPageTitle = title;
+  state.title.currentPage = title;
   const tabId = Number.isInteger(tab.id) ? tab.id : null;
   const tabUrl = typeof tab.url === "string" ? tab.url : "";
-  const tabChanged = tabId !== lastAutoTabId || tabUrl !== lastAutoTabUrl;
+  const tabChanged = tabId !== state.title.lastTabId || tabUrl !== state.title.lastTabUrl;
   const shouldUpdateTitle = shouldAutoUpdateTitle();
   if (!tabChanged && !shouldUpdateTitle) return;
   let didUpdate = false;
   if (shouldUpdateTitle) {
     meetingNameInput.value = title;
-    lastAutoTitle = title;
-    userEditedTitle = false;
+    state.title.lastAutomatic = title;
+    state.title.userEdited = false;
     didUpdate = true;
   }
   if (tabChanged) {
-    lastAutoTabId = tabId;
-    lastAutoTabUrl = tabUrl;
-    currentPageUrl = tabUrl;
-    recordPageVisit(currentPageUrl, currentPageTitle);
+    state.title.lastTabId = tabId;
+    state.title.lastTabUrl = tabUrl;
+    state.page.currentUrl = tabUrl;
+    recordPageVisit(state.page.currentUrl, state.title.currentPage);
     didUpdate = true;
   }
   if (didUpdate) {
@@ -569,21 +465,21 @@ const announcePanelOpen = (tabId) => {
 
 const setPanelTabId = (tabId) => {
   if (!Number.isInteger(tabId)) return;
-  if (panelTabId === tabId) return;
-  if (panelTabId) {
-    chrome.runtime.sendMessage({ type: "PANEL_CLOSE", tabId: panelTabId }, () => {
+  if (state.page.panelTabId === tabId) return;
+  if (state.page.panelTabId) {
+    chrome.runtime.sendMessage({ type: "PANEL_CLOSE", tabId: state.page.panelTabId }, () => {
       if (chrome.runtime.lastError) {
         // Background may be sleeping; ignore.
       }
     });
   }
-  panelTabId = tabId;
-  announcePanelOpen(panelTabId);
+  state.page.panelTabId = tabId;
+  announcePanelOpen(state.page.panelTabId);
 };
 
 const syncPanelOpenState = () => {
-  if (panelTabId) {
-    announcePanelOpen(panelTabId);
+  if (state.page.panelTabId) {
+    announcePanelOpen(state.page.panelTabId);
     return;
   }
   chrome.runtime.sendMessage({ type: "PANEL_OPEN_ACTIVE" }, (response) => {
@@ -591,7 +487,7 @@ const syncPanelOpenState = () => {
       return;
     }
     if (response?.tabId && Number.isInteger(response.tabId)) {
-      panelTabId = response.tabId;
+      state.page.panelTabId = response.tabId;
     }
   });
 };
@@ -686,7 +582,7 @@ const insertPastedTextAsPlainText = (text) => {
   caretRange.collapse(true);
   selection.removeAllRanges();
   selection.addRange(caretRange);
-  lastNotesRange = caretRange.cloneRange();
+  state.editor.lastRange = caretRange.cloneRange();
 };
 
 const applyFormat = (format) => {
@@ -844,7 +740,7 @@ const applyFormat = (format) => {
       caretRange.collapse(true);
       selection.removeAllRanges();
       selection.addRange(caretRange);
-      lastNotesRange = caretRange.cloneRange();
+      state.editor.lastRange = caretRange.cloneRange();
       break;
     }
   }
@@ -928,12 +824,16 @@ const updateToolbarState = () => {
 const pluralize = (count, singular, plural = `${singular}s`) =>
   `${count} ${count === 1 ? singular : plural}`;
 
+const wordSegmenter =
+  typeof Intl !== "undefined" && Intl.Segmenter
+    ? new Intl.Segmenter(undefined, { granularity: "word" })
+    : null;
+
 const countWords = (text) => {
   const normalized = (text || "").trim();
   if (!normalized) return 0;
-  if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
-    return Array.from(segmenter.segment(normalized)).filter(
+  if (wordSegmenter) {
+    return Array.from(wordSegmenter.segment(normalized)).filter(
       (segment) => segment.isWordLike
     ).length;
   }
@@ -969,31 +869,6 @@ const hasNoteContent = () => {
   return Boolean(notesInput.querySelector("img, figure.image-attachment, pre"));
 };
 
-const getImageExtensionFromUrl = (value) => {
-  try {
-    const parsed = new URL(value);
-    const extension = parsed.pathname.split(".").pop()?.toLowerCase() || "";
-    return SUPPORTED_IMAGE_EXTENSIONS.has(extension) ? extension : "";
-  } catch (error) {
-    return "";
-  }
-};
-
-const getDataImageType = (value) => {
-  const match = /^data:(image\/[a-z0-9.+-]+);base64,/i.exec(value || "");
-  const mimeType = match?.[1]?.toLowerCase() || "";
-  return SUPPORTED_IMAGE_TYPES.has(mimeType) ? mimeType : "";
-};
-
-const getImageExtension = (src, fallbackType = "") => {
-  const dataType = getDataImageType(src);
-  if (dataType) return SUPPORTED_IMAGE_TYPES.get(dataType);
-  if (fallbackType && SUPPORTED_IMAGE_TYPES.has(fallbackType)) {
-    return SUPPORTED_IMAGE_TYPES.get(fallbackType);
-  }
-  return getImageExtensionFromUrl(src) || "png";
-};
-
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1001,25 +876,6 @@ const readFileAsDataUrl = (file) =>
     reader.addEventListener("error", () => reject(reader.error));
     reader.readAsDataURL(file);
   });
-
-const dataUrlToBlob = async (dataUrl) => {
-  const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/i.exec(
-    dataUrl || ""
-  );
-  if (!match) {
-    throw new Error("Unsupported image data.");
-  }
-  const mimeType = match[1].toLowerCase();
-  if (!SUPPORTED_IMAGE_TYPES.has(mimeType)) {
-    throw new Error("Unsupported image type.");
-  }
-  const binary = atob(match[2]);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return new Blob([bytes], { type: mimeType });
-};
 
 const createRemoteImagePlaceholder = ({ src, alt }) => {
   const figure = document.createElement("figure");
@@ -1069,7 +925,7 @@ const insertImageIntoEditor = ({ src, alt = "Image" }) => {
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
-    lastNotesRange = range.cloneRange();
+    state.editor.lastRange = range.cloneRange();
   }
   updateEditorStats();
   debouncedSaveDraft();
@@ -1135,114 +991,21 @@ const insertRemoteImages = (images) => {
   }
 };
 
-const toAttachmentSafeName = (value, fallback = "image") =>
-  slugify(value || fallback).replace(/^-+|-+$/g, "") || fallback;
-
-const buildObsidianImageExport = async (markdown, noteFilename) => {
-  const noteBase = toAttachmentSafeName(noteFilename.replace(/\.md$/i, ""), "note");
-  const attachments = [];
-  let output = "";
-  let lastIndex = 0;
-  const imageRegex = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
-  let match;
-  while ((match = imageRegex.exec(markdown))) {
-    const [fullMatch, rawAlt, rawSrc] = match;
-    const src = normalizeImageSrc(rawSrc);
-    if (!src) continue;
-    output += markdown.slice(lastIndex, match.index);
-    lastIndex = match.index + fullMatch.length;
-    const alt = rawAlt?.trim() || "Image";
-    const extension = getImageExtension(src);
-    const attachmentFilename = `${noteBase}-image-${attachments.length + 1}.${extension}`;
-    const relativePath = `attachments/${attachmentFilename}`;
-    output += `![${alt.replace(/[\[\]\n\r]/g, " ")}](${relativePath})`;
-    if (/^data:/i.test(src)) {
-      attachments.push({
-        kind: "blob",
-        path: relativePath,
-        blob: await dataUrlToBlob(src),
-      });
-    } else {
-      attachments.push({
-        kind: "remote",
-        path: relativePath,
-        url: src,
-      });
-    }
-  }
-  output += markdown.slice(lastIndex);
-  return { markdown: output, attachments };
-};
-
-const toYamlString = (value) => JSON.stringify(String(value || ""));
-
-const toYamlLinkListItem = (title, url) => {
-  const safeTitle =
-    String(title || url || "")
-      .replace(/[\[\]\r\n]/g, " ")
-      .trim() || url;
-  return toYamlString(`[${safeTitle}](${url})`);
-};
-
-const getLocalDateTimeParts = (value) => {
-  const parsed = value ? new Date(value) : new Date();
-  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-  const datePart = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(
-    date.getDate()
-  )}`;
-  const timePart = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-  return {
-    date: datePart,
-    time: timePart,
-    datetime: `${datePart}T${timePart}`,
-  };
-};
-
-const buildYamlFrontmatter = ({ title, meetingDate }) => {
-  const { date, time, datetime } = getLocalDateTimeParts(meetingDate);
-  const pages = getVisitedPagesForFrontmatter();
-  const lines = [
-    "---",
-    `title: ${toYamlString(title)}`,
-    `date: ${date}`,
-    `time: ${toYamlString(time)}`,
-    `datetime: ${toYamlString(datetime)}`,
-  ];
-  if (pages.length) {
-    lines.push("pages_visited:");
-    pages.forEach((page) => {
-      lines.push(`  - ${toYamlLinkListItem(page.title, page.url)}`);
-    });
-  } else {
-    lines.push("pages_visited: []");
-  }
-  lines.push("---");
-  return lines.join("\n");
-};
-
-const buildMarkdown = ({ meetingName, meetingDate, notes }) => {
-  const title = sanitizeMeetingName(meetingName);
-  const body = notes.trim() ? `${notes.trim()}\n` : "";
-  const frontmatter = buildYamlFrontmatter({ title, meetingDate });
-
-  return `${frontmatter}\n\n# ${title}\n\n${body}`;
-};
-
 const getFormData = () => ({
   meetingName: meetingNameInput.value,
   meetingDate: meetingDateInput.value,
   notes: htmlToMarkdown(notesInput.innerHTML),
   notesText: notesInput.textContent || "",
-  pageUrl: currentPageUrl,
-  pageTitle: currentPageTitle,
-  pageHistory: normalizePageHistory(pageHistory),
+  pageUrl: state.page.currentUrl,
+  pageTitle: state.title.currentPage,
+  pageHistory: normalizePageHistory(state.page.history),
 });
 
 const getDraftData = (formData = getFormData()) => ({
   ...formData,
-  cursorOffset: lastCaretOffset,
+  cursorOffset: state.editor.lastCaretOffset,
   editorFocused: document.activeElement === notesInput,
-  libraryEntryId: currentLibraryEntryId,
+  libraryEntryId: state.library.currentEntryId,
 });
 
 const setFormData = ({
@@ -1255,18 +1018,17 @@ const setFormData = ({
 }) => {
   meetingNameInput.value = meetingName || "";
   meetingDateInput.value = meetingDate || toLocalDateTimeValue();
-  updateMeetingDateDisplay(meetingDateInput.value);
-  currentPageUrl = pageUrl || currentPageUrl;
-  pageHistory = normalizePageHistory(savedPageHistory);
-  currentLibraryEntryId = libraryEntryId || null;
+  datePickerController.updateDisplay();
+  state.page.currentUrl = pageUrl || state.page.currentUrl;
+  state.page.history = normalizePageHistory(savedPageHistory);
+  state.library.currentEntryId = libraryEntryId || null;
   notesInput.innerHTML = markdownToHtml(notes || "");
   removeLegacySourceLines();
   updateEditorStats();
 };
 
-const saveDraft = async () => {
-  const formData = getFormData();
-  const draft = getDraftData(formData);
+const persistDraft = async (formData, draft, titleWasEdited) => {
+  const initialLibraryEntryId = draft.libraryEntryId;
   try {
     await storageSet({ [STORAGE_KEY]: draft });
     showToast("Saved locally", {
@@ -1285,12 +1047,56 @@ const saveDraft = async () => {
   // by itself spawn an empty library entry. Runs independently of the
   // draft-storage save above (own try/catch inside saveNoteToLibrary) so a
   // library-write failure never blocks or is blocked by the draft save.
-  if (hasRealNoteContent()) {
+  if (hasRealNoteContent(formData, titleWasEdited)) {
     await saveNoteToLibrary(formData);
+  }
+  if (state.library.currentEntryId !== initialLibraryEntryId) {
+    try {
+      await storageSet({
+        [STORAGE_KEY]: { ...draft, libraryEntryId: state.library.currentEntryId },
+      });
+    } catch (error) {
+      reportError("Couldn't save the library link in this draft.", error);
+    }
   }
 };
 
+const saveDraft = () => {
+  const formData = getFormData();
+  const draft = getDraftData(formData);
+  const titleWasEdited = state.title.userEdited;
+  state.draftSaveQueue = state.draftSaveQueue.then(
+    () => persistDraft(formData, draft, titleWasEdited),
+    () => persistDraft(formData, draft, titleWasEdited)
+  );
+  return state.draftSaveQueue;
+};
+
 const debouncedSaveDraft = debounce(saveDraft, 300);
+
+const datePickerController = createDatePicker({
+  elements: {
+    input: meetingDateInput,
+    display: meetingDateDisplay,
+    picker: datePicker,
+    grid: dateGrid,
+    monthLabel: dateMonthLabel,
+    openButton: openDatePickerButton,
+    previousButton: datePrev,
+    nextButton: dateNext,
+    todayButton: dateToday,
+    doneButton: dateDone,
+    setNowButton,
+    hourDecreaseButton: timeHourDec,
+    hourIncreaseButton: timeHourInc,
+    minuteDecreaseButton: timeMinuteDec,
+    minuteIncreaseButton: timeMinuteInc,
+    hourValue: timeHourValue,
+    minuteValue: timeMinuteValue,
+  },
+  formatDateTime,
+  onChange: debouncedSaveDraft,
+});
 
 const resetEditorFormatting = () => {
   notesInput.focus();
@@ -1308,177 +1114,59 @@ const resetEditorFormatting = () => {
   notesInput.blur();
 };
 
-const downloadMarkdown = (
-  markdown,
-  filename,
-  { saveAs, conflictAction, mimeType = "text/markdown" }
-) =>
-  downloadBlob(new Blob([markdown], { type: mimeType }), filename, {
-    saveAs,
-    conflictAction,
-  });
-
-const downloadBlob = (
-  blob,
-  filename,
-  { saveAs = false, conflictAction = "uniquify" } = {}
-) =>
-  new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    chrome.downloads.download(
-      {
-        url,
-        filename,
-        saveAs,
-        conflictAction,
-      },
-      (downloadId) => {
-        URL.revokeObjectURL(url);
-        if (chrome.runtime.lastError || !downloadId) {
-          reject(chrome.runtime.lastError);
-          return;
-        }
-        resolve(downloadId);
-      }
-    );
-  });
-
-const fetchRemoteAttachmentBlob = async (url) => {
-  const safeUrl = normalizeImageSrc(url);
-  if (!safeUrl || /^data:/i.test(safeUrl)) {
-    throw new Error("Unsupported image URL.");
-  }
-  const response = await fetch(safeUrl, {
-    credentials: "omit",
-    referrerPolicy: "no-referrer",
-  });
-  if (!response.ok) {
-    throw new Error(`Image download failed (${response.status}).`);
-  }
-  const contentLength = Number(response.headers.get("content-length") || 0);
-  if (contentLength > MAX_EXPORTED_IMAGE_BYTES) {
-    throw new Error("Image is too large to export.");
-  }
-  const contentType = (response.headers.get("content-type") || "")
-    .split(";")[0]
-    .trim()
-    .toLowerCase();
-  if (!SUPPORTED_IMAGE_TYPES.has(contentType)) {
-    throw new Error("Downloaded file is not a supported image.");
-  }
-  const blob = await response.blob();
-  if (blob.size > MAX_EXPORTED_IMAGE_BYTES) {
-    throw new Error("Image is too large to export.");
-  }
-  return blob;
-};
-
-const downloadImageAttachments = async (attachments, exportRoot = "") => {
-  for (const attachment of attachments) {
-    const filename = exportRoot
-      ? `${exportRoot}/${attachment.path}`
-      : attachment.path;
-    if (attachment.kind === "blob") {
-      await downloadBlob(attachment.blob, filename, {
-        saveAs: false,
-        conflictAction: "overwrite",
-      });
-    } else if (attachment.kind === "remote") {
-      await downloadBlob(await fetchRemoteAttachmentBlob(attachment.url), filename, {
-        saveAs: false,
-        conflictAction: "overwrite",
-      });
-    }
-  }
-};
-
-const writeBlobFile = async (directoryHandle, filename, blob) => {
-  const fileHandle = await directoryHandle.getFileHandle(filename, {
-    create: true,
-  });
-  const writable = await fileHandle.createWritable();
-  try {
-    await writable.write(blob);
-  } finally {
-    await writable.close();
-  }
-};
-
-const writeTextFile = (directoryHandle, filename, text, mimeType) =>
-  writeBlobFile(directoryHandle, filename, new Blob([text], { type: mimeType }));
-
-const writeAttachmentsToDirectory = async (directoryHandle, attachments) => {
-  if (!attachments.length) return;
-  const attachmentsDirectory = await directoryHandle.getDirectoryHandle(
-    "attachments",
-    { create: true }
-  );
-  for (const attachment of attachments) {
-    const filename = attachment.path.split("/").pop();
-    if (!filename) continue;
-    if (attachment.kind === "blob") {
-      await writeBlobFile(attachmentsDirectory, filename, attachment.blob);
-    } else if (attachment.kind === "remote") {
-      await writeBlobFile(
-        attachmentsDirectory,
-        filename,
-        await fetchRemoteAttachmentBlob(attachment.url)
-      );
-    }
-  }
-};
-
-const toDownloadFilename = (value) => {
-  const fallbackName = "note.md";
-  const raw = typeof value === "string" ? value : "";
-  const sanitized = (raw || fallbackName)
-    .replace(/[\\/:*?"<>|]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!sanitized) return fallbackName;
-  return /\.md$/i.test(sanitized) ? sanitized : `${sanitized}.md`;
-};
-
-// Side effect of Save/Save As, never of the autosaved draft — see
-// ADR-0006 and docs/specs/note-library.md. `data` is the same pre-export
+// Library side effect of autosave, never of Save/Save As — see ADR-0007 and
+// docs/specs/note-library.md. `data` is the same pre-export
 // shape getFormData() already builds (Markdown with data-URI/remote image
 // references intact, not the attachments/-rewritten export form), so a
 // library entry can be reloaded straight back into the editor via
 // markdownToHtml with no extra reconstruction step. A failure here must
-// never affect the disk export that already succeeded by the time this
-// runs, so it only ever reports softly (no window.alert, no throw).
-const saveNoteToLibrary = async (data) => {
+// never prevent the draft-storage write in persistDraft, so it only ever
+// reports softly (no window.alert, no throw).
+const persistNoteToLibrary = async (data) => {
   try {
     const now = Date.now();
-    const existing = currentLibraryEntryId
-      ? await NoteLibrary.getEntry(currentLibraryEntryId)
+    const existing = state.library.currentEntryId
+      ? await NoteLibrary.getEntry(state.library.currentEntryId)
       : null;
     const id = existing ? existing.id : NoteLibrary.generateId();
-    await NoteLibrary.putEntry({
-      id,
-      title: sanitizeMeetingName(data.meetingName),
-      meetingDate: data.meetingDate,
-      notes: data.notes,
-      pageHistory: normalizePageHistory(data.pageHistory),
-      createdAt: existing ? existing.createdAt : now,
-      updatedAt: now,
-    });
-    currentLibraryEntryId = id;
+    await NoteLibrary.putEntry(
+      buildLibraryEntry({
+        data: {
+          ...data,
+          pageHistory: normalizePageHistory(data.pageHistory),
+        },
+        existing,
+        id,
+        now,
+      })
+    );
+    state.library.currentEntryId = id;
   } catch (error) {
     reportError("Couldn't save this note to your library.", error);
   }
+};
+
+const saveNoteToLibrary = (data) => {
+  state.library.saveQueue = state.library.saveQueue.then(
+    () => persistNoteToLibrary(data),
+    () => persistNoteToLibrary(data)
+  );
+  return state.library.saveQueue;
 };
 
 // Whether the editor holds real, user-authored content worth keeping as
 // its own library entry — deliberately stricter than "editor is non-empty":
 // the title auto-fills from the active tab as soon as the panel opens (see
 // context-title-suggestion.md), so a plain non-empty check would spawn a
-// library entry from that alone. Require either actual note-body text, or
-// a title the user deliberately typed/edited (userEditedTitle).
-const hasRealNoteContent = () =>
+// library entry from that alone. Require actual note-body Markdown (including
+// an image or formatting block), or a deliberately edited title.
+const hasRealNoteContent = (
+  data = getFormData(),
+  titleWasEdited = state.title.userEdited
+) =>
   Boolean(
-    notesInput.textContent.trim() ||
-      (userEditedTitle && meetingNameInput.value.trim())
+    String(data.notes || "").trim() ||
+      (titleWasEdited && String(data.meetingName || "").trim())
   );
 
 // Ensures the note currently in the editor is captured in the library
@@ -1487,8 +1175,10 @@ const hasRealNoteContent = () =>
 // removes any dependency on that debounce's timing for an action that's
 // about to replace the editor's content outright.
 const flushLibrarySync = async () => {
-  if (!hasRealNoteContent()) return;
-  await saveNoteToLibrary(getFormData());
+  await state.draftSaveQueue;
+  const data = getFormData();
+  if (!hasRealNoteContent(data)) return;
+  await saveNoteToLibrary(data);
 };
 
 const noteSnippet = (markdown, maxLen = 90) => {
@@ -1519,7 +1209,7 @@ const openLibraryEntry = async (id) => {
     meetingName: entry.title,
     meetingDate: entry.meetingDate,
     notes: entry.notes,
-    pageUrl: currentPageUrl,
+    pageUrl: state.page.currentUrl,
     pageHistory: entry.pageHistory,
     libraryEntryId: entry.id,
   });
@@ -1537,8 +1227,8 @@ const deleteLibraryEntryPrompt = async (entry) => {
   if (!confirmed) return;
   try {
     await NoteLibrary.deleteEntry(entry.id);
-    if (currentLibraryEntryId === entry.id) {
-      currentLibraryEntryId = null;
+    if (state.library.currentEntryId === entry.id) {
+      state.library.currentEntryId = null;
     }
     await loadLibraryList();
   } catch (error) {
@@ -1579,8 +1269,8 @@ const entryMatchesCurrentSite = (entry, host) => {
 
 const updateLibraryBulkBar = () => {
   if (!libraryBulkBar) return;
-  libraryBulkBar.hidden = !libraryMultiSelectMode;
-  const count = librarySelectedIds.size;
+  libraryBulkBar.hidden = !state.library.multiSelect;
+  const count = state.library.selectedIds.size;
   if (libraryBulkCount) {
     libraryBulkCount.textContent = `${pluralize(count, "note")} selected`;
   }
@@ -1590,8 +1280,8 @@ const updateLibraryBulkBar = () => {
 };
 
 const exitLibraryMultiSelectMode = () => {
-  libraryMultiSelectMode = false;
-  librarySelectedIds.clear();
+  state.library.multiSelect = false;
+  state.library.selectedIds.clear();
   libraryMultiSelectBtn?.classList.remove("active");
   libraryMultiSelectBtn?.setAttribute("aria-pressed", "false");
   updateLibraryBulkBar();
@@ -1611,7 +1301,7 @@ const toggleLibraryEntryPinned = async (entry) => {
 };
 
 const deleteSelectedLibraryEntries = async () => {
-  const ids = Array.from(librarySelectedIds);
+  const ids = Array.from(state.library.selectedIds);
   if (!ids.length) return;
   const confirmed = window.confirm(
     `Remove ${pluralize(ids.length, "note")} from the library? This only removes them from Jot it! — it does not delete or affect any exported .md files already on disk.`
@@ -1620,7 +1310,7 @@ const deleteSelectedLibraryEntries = async () => {
   try {
     for (const id of ids) {
       await NoteLibrary.deleteEntry(id);
-      if (currentLibraryEntryId === id) currentLibraryEntryId = null;
+      if (state.library.currentEntryId === id) state.library.currentEntryId = null;
     }
     showToast(`Deleted ${pluralize(ids.length, "note")}`, { timeoutMs: 1800 });
   } catch (error) {
@@ -1636,8 +1326,8 @@ const renderLibraryList = (searchTerm) => {
   const term = (searchTerm || "").trim().toLowerCase();
   const currentHost = getCurrentHost();
 
-  let base = libraryEntriesCache;
-  if (libraryFilterThisSite) {
+  let base = state.library.entries;
+  if (state.library.filterThisSite) {
     base = base.filter((entry) => entryMatchesCurrentSite(entry, currentHost));
   }
 
@@ -1654,7 +1344,7 @@ const renderLibraryList = (searchTerm) => {
         return haystack.includes(term);
       });
 
-  const sorted = sortLibraryEntries(filtered, librarySortMode);
+  const sorted = sortLibraryEntries(filtered, state.library.sortMode);
   const ordered = [
     ...sorted.filter((entry) => entry.pinned),
     ...sorted.filter((entry) => !entry.pinned),
@@ -1663,14 +1353,14 @@ const renderLibraryList = (searchTerm) => {
   libraryList.innerHTML = "";
 
   if (libraryEmptyState) {
-    if (!libraryEntriesCache.length) {
+    if (!state.library.entries.length) {
       libraryEmptyState.hidden = false;
       libraryEmptyState.textContent =
         "No saved notes yet. Every note saves automatically as you type — notes you save will show up here.";
     } else if (!ordered.length && term) {
       libraryEmptyState.hidden = false;
       libraryEmptyState.textContent = "No notes match your search.";
-    } else if (!ordered.length && libraryFilterThisSite) {
+    } else if (!ordered.length && state.library.filterThisSite) {
       libraryEmptyState.hidden = false;
       libraryEmptyState.textContent = "No saved notes from this site yet.";
     } else {
@@ -1684,20 +1374,20 @@ const renderLibraryList = (searchTerm) => {
     if (entry.pinned) row.classList.add("is-pinned");
     row.dataset.id = entry.id;
 
-    if (libraryMultiSelectMode) {
+    if (state.library.multiSelect) {
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.className = "library-row__checkbox";
-      checkbox.checked = librarySelectedIds.has(entry.id);
+      checkbox.checked = state.library.selectedIds.has(entry.id);
       checkbox.setAttribute(
         "aria-label",
         `Select "${entry.title || "Untitled note"}"`
       );
       checkbox.addEventListener("change", () => {
         if (checkbox.checked) {
-          librarySelectedIds.add(entry.id);
+          state.library.selectedIds.add(entry.id);
         } else {
-          librarySelectedIds.delete(entry.id);
+          state.library.selectedIds.delete(entry.id);
         }
         updateLibraryBulkBar();
       });
@@ -1741,7 +1431,7 @@ const renderLibraryList = (searchTerm) => {
 
     open.append(titleEl, dateEl, snippetEl);
     open.addEventListener("click", () => {
-      if (libraryMultiSelectMode) {
+      if (state.library.multiSelect) {
         const checkbox = row.querySelector(".library-row__checkbox");
         if (checkbox) {
           checkbox.checked = !checkbox.checked;
@@ -1753,7 +1443,7 @@ const renderLibraryList = (searchTerm) => {
     });
     row.appendChild(open);
 
-    if (!libraryMultiSelectMode) {
+    if (!state.library.multiSelect) {
       const save = document.createElement("button");
       save.type = "button";
       save.className = "library-row__save";
@@ -1797,23 +1487,23 @@ const renderLibraryList = (searchTerm) => {
 const loadLibraryList = async () => {
   if (!libraryList) return;
   try {
-    libraryEntriesCache = await NoteLibrary.listEntries();
+    state.library.entries = await NoteLibrary.listEntries();
   } catch (error) {
     reportError("Couldn't load saved notes.", error);
-    libraryEntriesCache = [];
+    state.library.entries = [];
   }
   renderLibraryList(librarySearchInput?.value || "");
   updateLibraryBulkBar();
 };
 
 const setLibraryViewOpen = (open) => {
-  libraryViewOpen = open;
+  state.library.viewOpen = open;
   if (libraryView) libraryView.hidden = !open;
   if (metaSection) metaSection.hidden = open;
   if (notesSection) notesSection.hidden = open;
   libraryToggleBtn?.classList.toggle("active", open);
   libraryToggleBtn?.setAttribute("aria-pressed", String(open));
-  if (!open && libraryMultiSelectMode) {
+  if (!open && state.library.multiSelect) {
     exitLibraryMultiSelectMode();
   }
   if (open) {
@@ -1826,42 +1516,28 @@ const setLibraryViewOpen = (open) => {
 // the editor first — mirrors handleSave's exact single-note behavior
 // (folder only if the note has image attachments, silent saveAs:false
 // download falling back to saveAs:true on error), just operating on a
-// stored entry's data instead of the live editor. Kept as its own
-// duplicate rather than refactored to share code with handleSave/
-// handleSaveAs/exportAllNotes — that consolidation is known-issue #2 in
-// docs/plan/roadmap.md, explicitly left on hold; this follows the same
-// already-accepted duplication pattern rather than touching working,
-// tested code for an unrelated change.
+// stored entry's data instead of the live editor. Export construction is
+// shared through prepareNoteExport(); only this path's disk-write fallback
+// remains specific to the row action.
 const exportLibraryEntry = async (entry) => {
   const data = {
     meetingName: entry.title,
     meetingDate: entry.meetingDate,
     notes: entry.notes,
+    pageHistory: entry.pageHistory,
   };
-  // buildMarkdown/buildYamlFrontmatter read page-visit history off the
-  // module-level pageHistory variable — swap to this entry's own history
-  // for the export, restore the live editor's regardless of outcome.
-  const originalPageHistory = pageHistory;
-  pageHistory = normalizePageHistory(entry.pageHistory);
   try {
-    const filename = buildFilename(data);
-    const downloadFilename = toDownloadFilename(filename);
-    const exportData = await buildObsidianImageExport(
-      buildMarkdown(data),
-      downloadFilename
-    );
-    const hasAttachments = exportData.attachments.length > 0;
-    const exportRoot = hasAttachments
-      ? toAttachmentSafeName(downloadFilename.replace(/\.md$/i, ""), "jot-it-note")
-      : "";
-    const payload = exportData.markdown;
+    const {
+      downloadFilename,
+      exportData,
+      hasAttachments,
+      exportRoot,
+      noteDownloadFilename,
+    } = await prepareNoteExport(data);
     const mimeType = "text/markdown";
-    const noteDownloadFilename = exportRoot
-      ? `${exportRoot}/${downloadFilename}`
-      : downloadFilename;
 
     try {
-      await downloadMarkdown(payload, noteDownloadFilename, {
+      await downloadMarkdown(exportData.markdown, noteDownloadFilename, {
         saveAs: false,
         conflictAction: "uniquify",
         mimeType,
@@ -1873,7 +1549,7 @@ const exportLibraryEntry = async (entry) => {
         window.alert("Image export failed. Please try again.");
         return;
       }
-      await downloadMarkdown(payload, noteDownloadFilename, {
+      await downloadMarkdown(exportData.markdown, noteDownloadFilename, {
         saveAs: true,
         conflictAction: "uniquify",
         mimeType,
@@ -1887,8 +1563,6 @@ const exportLibraryEntry = async (entry) => {
   } catch (error) {
     reportError(`Couldn't export "${entry.title || "a note"}".`, error);
     window.alert("Save failed. Please try again.");
-  } finally {
-    pageHistory = originalPageHistory;
   }
 };
 
@@ -1921,7 +1595,7 @@ const parseImportedNote = (text) => {
   let title = "";
   let date = "";
   let time = "";
-  const pageHistory = [];
+  const importedPageHistory = [];
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
@@ -1948,7 +1622,7 @@ const parseImportedNote = (text) => {
           const linkString = parseYamlScalarString(itemMatch[1]);
           const linkMatch = /^\[([^\]]*)\]\(([^)]*)\)$/.exec(linkString);
           if (linkMatch) {
-            pageHistory.push({
+            importedPageHistory.push({
               title: linkMatch[1] || linkMatch[2],
               url: linkMatch[2],
               visitedAt: Date.now(),
@@ -1973,7 +1647,7 @@ const parseImportedNote = (text) => {
     title: title || "Imported note",
     meetingDate,
     notes: body.trim(),
-    pageHistory,
+    pageHistory: importedPageHistory,
   };
 };
 
@@ -2038,63 +1712,48 @@ const exportAllNotes = async () => {
     }
   }
 
-  // buildMarkdown/buildYamlFrontmatter read page-visit history off the
-  // module-level `pageHistory` variable (the currently-open note's), not
-  // from an argument — swap it to each entry's own history for the
-  // duration of that entry's export, and restore the live editor's actual
-  // history no matter how the loop ends.
-  const originalPageHistory = pageHistory;
   let successCount = 0;
-  try {
-    for (const entry of entries) {
-      const data = {
-        meetingName: entry.title,
-        meetingDate: entry.meetingDate,
-        notes: entry.notes,
-      };
-      pageHistory = normalizePageHistory(entry.pageHistory);
-      try {
-        const filename = buildFilename(data);
-        const downloadFilename = toDownloadFilename(filename);
-        const exportData = await buildObsidianImageExport(
-          buildMarkdown(data),
-          downloadFilename
-        );
-        const entryFolderName = toAttachmentSafeName(
-          downloadFilename.replace(/\.md$/i, ""),
-          "jot-it-note"
-        );
+  for (const entry of entries) {
+    const data = {
+      meetingName: entry.title,
+      meetingDate: entry.meetingDate,
+      notes: entry.notes,
+      pageHistory: entry.pageHistory,
+    };
+    try {
+      const {
+        downloadFilename,
+        exportData,
+        exportRoot: entryFolderName,
+      } = await prepareNoteExport(data, { forceFolder: true });
 
-        if (directoryHandle) {
-          const entryDir = await directoryHandle.getDirectoryHandle(
-            entryFolderName,
-            { create: true }
-          );
-          await writeTextFile(
-            entryDir,
-            downloadFilename,
-            exportData.markdown,
-            "text/markdown"
-          );
-          await writeAttachmentsToDirectory(entryDir, exportData.attachments);
-        } else {
-          await downloadMarkdown(
-            exportData.markdown,
-            `${entryFolderName}/${downloadFilename}`,
-            { saveAs: false, conflictAction: "uniquify", mimeType: "text/markdown" }
-          );
-          await downloadImageAttachments(exportData.attachments, entryFolderName);
-          // Chrome warns/blocks after a handful of downloads triggered in
-          // quick succession from one page — throttle between notes.
-          await new Promise((resolve) => setTimeout(resolve, 400));
-        }
-        successCount += 1;
-      } catch (error) {
-        reportError(`Couldn't export "${entry.title || "a note"}".`, error);
+      if (directoryHandle) {
+        const entryDir = await directoryHandle.getDirectoryHandle(
+          entryFolderName,
+          { create: true }
+        );
+        await writeTextFile(
+          entryDir,
+          downloadFilename,
+          exportData.markdown,
+          "text/markdown"
+        );
+        await writeAttachmentsToDirectory(entryDir, exportData.attachments);
+      } else {
+        await downloadMarkdown(
+          exportData.markdown,
+          `${entryFolderName}/${downloadFilename}`,
+          { saveAs: false, conflictAction: "uniquify", mimeType: "text/markdown" }
+        );
+        await downloadImageAttachments(exportData.attachments, entryFolderName);
+        // Chrome warns/blocks after a handful of downloads triggered in
+        // quick succession from one page — throttle between notes.
+        await new Promise((resolve) => setTimeout(resolve, 400));
       }
+      successCount += 1;
+    } catch (error) {
+      reportError(`Couldn't export "${entry.title || "a note"}".`, error);
     }
-  } finally {
-    pageHistory = originalPageHistory;
   }
 
   showToast(`Exported ${successCount} of ${entries.length} notes`, {
@@ -2104,24 +1763,20 @@ const exportAllNotes = async () => {
 
 const handleSave = async () => {
   const data = getFormData();
-  const filename = buildFilename(data);
-  const downloadFilename = toDownloadFilename(filename);
-  const exportData = await buildObsidianImageExport(
-    buildMarkdown(data),
-    downloadFilename
-  );
-  const hasAttachments = exportData.attachments.length > 0;
-  const exportRoot = hasAttachments
-    ? toAttachmentSafeName(downloadFilename.replace(/\.md$/i, ""), "jot-it-note")
-    : "";
-  const payload = exportData.markdown;
+  let prepared;
+  try {
+    prepared = await prepareNoteExport(data);
+  } catch (error) {
+    reportError("Couldn't prepare this note for export.", error);
+    window.alert("Save failed. Please try again.");
+    return;
+  }
+  const { exportData, hasAttachments, exportRoot, noteDownloadFilename } =
+    prepared;
   const mimeType = "text/markdown";
-  const noteDownloadFilename = exportRoot
-    ? `${exportRoot}/${downloadFilename}`
-    : downloadFilename;
 
   try {
-    await downloadMarkdown(payload, noteDownloadFilename, {
+    await downloadMarkdown(exportData.markdown, noteDownloadFilename, {
       saveAs: false,
       conflictAction: "uniquify",
       mimeType,
@@ -2134,7 +1789,7 @@ const handleSave = async () => {
       return;
     }
     try {
-      await downloadMarkdown(payload, noteDownloadFilename, {
+      await downloadMarkdown(exportData.markdown, noteDownloadFilename, {
         saveAs: true,
         conflictAction: "uniquify",
         mimeType,
@@ -2153,12 +1808,10 @@ const handleSave = async () => {
   notesInput.focus();
 };
 
-const handleSaveAs = async () => {
+const handleSaveAs = async ({ preferDirectoryPicker = true } = {}) => {
   const data = getFormData();
-  const filename = buildFilename(data);
-  const downloadFilename = toDownloadFilename(filename);
   let directoryHandle = null;
-  if (typeof window.showDirectoryPicker === "function") {
+  if (preferDirectoryPicker && typeof window.showDirectoryPicker === "function") {
     try {
       directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
     } catch (error) {
@@ -2167,17 +1820,21 @@ const handleSaveAs = async () => {
       return;
     }
   }
-  const exportData = await buildObsidianImageExport(
-    buildMarkdown(data),
-    downloadFilename
-  );
-  const hasAttachments = exportData.attachments.length > 0;
-  const exportRoot = hasAttachments
-    ? toAttachmentSafeName(downloadFilename.replace(/\.md$/i, ""), "jot-it-note")
-    : "";
-  const noteDownloadFilename = exportRoot
-    ? `${exportRoot}/${downloadFilename}`
-    : downloadFilename;
+  let prepared;
+  try {
+    prepared = await prepareNoteExport(data);
+  } catch (error) {
+    reportError("Couldn't prepare this note for export.", error);
+    window.alert("Save failed. Please try again.");
+    return;
+  }
+  const {
+    downloadFilename,
+    exportData,
+    hasAttachments,
+    exportRoot,
+    noteDownloadFilename,
+  } = prepared;
 
   if (directoryHandle) {
     try {
@@ -2234,7 +1891,7 @@ const handleClear = async () => {
     notes: "",
     pageHistory: [],
   });
-  pageHistory = [];
+  state.page.history = [];
   updateTitleFromActiveTab().catch(() => {});
   try {
     await storageRemove(STORAGE_KEY);
@@ -2248,8 +1905,24 @@ const handleClear = async () => {
   notesInput.focus();
 };
 
-chrome.runtime.onMessage.addListener((message, sender) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return;
+  if (message.type === "RUN_PANEL_COMMAND") {
+    const isTrustedSender =
+      sender?.id === chrome.runtime.id &&
+      sender?.url === chrome.runtime.getURL("background.js");
+    if (!isTrustedSender) {
+      sendResponse({ ok: false, error: "Untrusted sender." });
+      return;
+    }
+    Promise.resolve(runPanelCommand(message.command))
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => {
+        reportError("Couldn't run keyboard command.", error);
+        sendResponse({ ok: false, error: String(error) });
+      });
+    return true;
+  }
   if (message.type !== "PAGE_SELECTION_CANDIDATE") return;
   if (typeof message.text !== "string" || !message.text.trim()) return;
   const now = Date.now();
@@ -2261,9 +1934,9 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     tabId: message.tabId,
   });
   if (
-    message.text === lastNotesInserted.text &&
-    incomingUrl === lastNotesInserted.url &&
-    now - lastNotesInsertedAt < 1000
+    message.text === state.editor.lastInsertedSelection.text &&
+    incomingUrl === state.editor.lastInsertedSelection.url &&
+    now - state.editor.lastInsertedAt < 1000
   ) {
     debugLog("PAGE_SELECTION_CANDIDATE deduped", { url: incomingUrl });
     return;
@@ -2276,7 +1949,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   }
   showPendingPageSelection({
     text: message.text,
-    url: message.url || currentPageUrl,
+    url: message.url || state.page.currentUrl,
     title: message.title || "",
     tabId: senderTabId,
     receivedAt: now,
@@ -2284,21 +1957,21 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 });
 
 const addPendingPageSelection = () => {
-  if (!pendingPageSelection?.text?.trim()) return;
-  const selection = pendingPageSelection;
+  if (!state.editor.pendingSelection?.text?.trim()) return;
+  const selection = state.editor.pendingSelection;
   if (selection.url || selection.title) {
     recordPageVisit(selection.url, selection.title);
   }
-  insertSelectionWithLink(selection.text, selection.url || currentPageUrl);
-  debugLog("selection inserted", { url: selection.url || currentPageUrl });
-  lastNotesInserted = { text: selection.text, url: selection.url || "" };
-  lastNotesInsertedAt = Date.now();
+  insertSelectionWithLink(selection.text, selection.url || state.page.currentUrl);
+  debugLog("selection inserted", { url: selection.url || state.page.currentUrl });
+  state.editor.lastInsertedSelection = { text: selection.text, url: selection.url || "" };
+  state.editor.lastInsertedAt = Date.now();
   clearPendingPageSelection();
   debouncedSaveDraft();
 };
 const handleMeetingNameInput = () => {
   const value = meetingNameInput.value.trim();
-  userEditedTitle = value !== "" && value !== lastAutoTitle;
+  state.title.userEdited = value !== "" && value !== state.title.lastAutomatic;
   setTitleLocked(true);
   debouncedSaveDraft();
 };
@@ -2308,21 +1981,21 @@ const storeNotesSelection = () => {
   if (!selection || selection.rangeCount === 0) return;
   const range = selection.getRangeAt(0);
   if (!notesInput.contains(range.startContainer)) return;
-  lastNotesRange = range.cloneRange();
+  state.editor.lastRange = range.cloneRange();
   const offset = getCaretOffset();
   if (Number.isInteger(offset)) {
-    lastCaretOffset = offset;
+    state.editor.lastCaretOffset = offset;
   }
 };
 
 const getInsertRange = () => {
-  if (lastNotesRange && notesInput.contains(lastNotesRange.startContainer)) {
-    return lastNotesRange;
+  if (state.editor.lastRange && notesInput.contains(state.editor.lastRange.startContainer)) {
+    return state.editor.lastRange;
   }
   const selection = ensureSelectionInNotes();
   if (selection && selection.rangeCount) {
     const range = selection.getRangeAt(0);
-    lastNotesRange = range.cloneRange();
+    state.editor.lastRange = range.cloneRange();
     return range;
   }
   return null;
@@ -2377,7 +2050,7 @@ const insertSelectionWithLink = (text, url) => {
   const selection = window.getSelection();
   selection.removeAllRanges();
   selection.addRange(caretRange);
-  lastNotesRange = caretRange.cloneRange();
+  state.editor.lastRange = caretRange.cloneRange();
   updateEditorStats();
 };
 
@@ -2387,6 +2060,7 @@ const attachTabListeners = () => {
     if (Number.isInteger(sourceTabId)) {
       chrome.tabs.onUpdated?.addListener((tabId, info) => {
         if (tabId !== sourceTabId) return;
+        if (!state.initialized) return;
         if (info.title || info.url) {
           updateTitleFromActiveTab().catch(() => {});
         }
@@ -2395,150 +2069,181 @@ const attachTabListeners = () => {
     return;
   }
   chrome.tabs.onActivated?.addListener((info) => {
+    if (!state.initialized) return;
     if (info?.tabId) {
       setPanelTabId(info.tabId);
     }
     updateTitleFromActiveTab().catch(() => {});
   });
   chrome.tabs.onUpdated?.addListener((tabId, info) => {
+    if (!state.initialized) return;
     if (info.title || info.url) {
       updateTitleFromActiveTab().catch(() => {});
     }
   });
 };
 
-const pad2 = (value) => String(value).padStart(2, "0");
-
-const parseDateValue = (value) => {
-  if (!value) return null;
-  const [datePart, timePart] = value.split("T");
-  if (!datePart || !timePart) return null;
-  const [year, month, day] = datePart.split("-").map(Number);
-  const [hour, minute] = timePart.split(":").map(Number);
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day)
-  ) {
-    return null;
-  }
-  const date = new Date(year, month - 1, day, hour || 0, minute || 0, 0, 0);
-  return Number.isNaN(date.getTime()) ? null : date;
+const toggleLibraryCurrentSiteFilter = () => {
+  state.library.filterThisSite = !state.library.filterThisSite;
+  libraryFilterSiteBtn?.classList.toggle("active", state.library.filterThisSite);
+  libraryFilterSiteBtn?.setAttribute("aria-pressed", String(state.library.filterThisSite));
+  renderLibraryList(librarySearchInput?.value || "");
 };
 
-const updateMeetingDateDisplay = (value) => {
-  if (!meetingDateDisplay) return;
-  const parsed = parseDateValue(value);
-  meetingDateDisplay.textContent = parsed ? formatDateTime(parsed) : "";
+const toggleLibraryMultiSelectMode = () => {
+  state.library.multiSelect = !state.library.multiSelect;
+  state.library.selectedIds.clear();
+  libraryMultiSelectBtn?.classList.toggle("active", state.library.multiSelect);
+  libraryMultiSelectBtn?.setAttribute("aria-pressed", String(state.library.multiSelect));
+  updateLibraryBulkBar();
+  renderLibraryList(librarySearchInput?.value || "");
 };
 
-const setMeetingDateValue = (date) => {
-  if (!date) return;
-  const value = `${date.getFullYear()}-${pad2(
-    date.getMonth() + 1
-  )}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(
-    date.getMinutes()
-  )}`;
-  meetingDateInput.value = value;
-  updateMeetingDateDisplay(value);
-  debouncedSaveDraft();
-};
-
-const getSelectedDate = () =>
-  parseDateValue(meetingDateInput.value) || new Date();
-
-const renderDatePicker = () => {
-  if (!dateGrid || !dateMonthLabel || !pickerMonth) return;
-  const selected = getSelectedDate();
-  const year = pickerMonth.getFullYear();
-  const month = pickerMonth.getMonth();
-
-  const formatter = new Intl.DateTimeFormat(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-  dateMonthLabel.textContent = formatter.format(pickerMonth);
-
-  dateGrid.innerHTML = "";
-  const firstDay = new Date(year, month, 1);
-  const startOffset = (firstDay.getDay() + 6) % 7;
-  const startDate = new Date(year, month, 1 - startOffset);
-
-  for (let i = 0; i < 42; i += 1) {
-    const current = new Date(
-      startDate.getFullYear(),
-      startDate.getMonth(),
-      startDate.getDate() + i
-    );
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "date-picker__day";
-    if (current.getMonth() !== month) {
-      button.classList.add("is-muted");
-    }
-    if (
-      current.getFullYear() === selected.getFullYear() &&
-      current.getMonth() === selected.getMonth() &&
-      current.getDate() === selected.getDate()
-    ) {
-      button.classList.add("is-selected");
-    }
-    button.textContent = String(current.getDate());
-    button.addEventListener("click", () => {
-      const updated = new Date(selected);
-      updated.setFullYear(
-        current.getFullYear(),
-        current.getMonth(),
-        current.getDate()
-      );
-      setMeetingDateValue(updated);
-      renderDatePicker();
+const detachSidebar = async () => {
+  const tab = await getActiveTab();
+  const tabId = Number.isInteger(state.page.panelTabId) ? state.page.panelTabId : tab?.id;
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "DETACH_AND_OPEN",
+      tabId,
     });
-    button.dataset.date = `${current.getFullYear()}-${pad2(current.getMonth() + 1)}-${pad2(current.getDate())}`;
-    dateGrid.appendChild(button);
+    if (!response?.ok) {
+      throw new Error(response?.error || "Detach failed.");
+    }
+  } catch (error) {
+    reportError("Couldn't detach the sidebar.", error);
   }
-
-  const hourValue = pad2(selected.getHours());
-  const minuteValue = pad2(selected.getMinutes());
-  if (timeHourValue) timeHourValue.textContent = hourValue;
-  if (timeMinuteValue) timeMinuteValue.textContent = minuteValue;
 };
 
-const adjustTime = ({ hourDelta = 0, minuteDelta = 0 } = {}) => {
-  const selected = getSelectedDate();
-  let hour = selected.getHours();
-  let minute = selected.getMinutes();
-  minute += minuteDelta;
-  while (minute < 0) {
-    minute += 60;
-    hour -= 1;
+const reattachSidebar = async () => {
+  const tabId = sourceTabId || (await getActiveTab())?.id;
+  if (!tabId) return;
+  try {
+    await chrome.sidePanel.setOptions({
+      tabId,
+      enabled: true,
+      path: "sidepanel.html",
+    });
+    await chrome.sidePanel.open({ tabId });
+    window.close();
+  } catch (error) {
+    reportError("Couldn't reattach the sidebar.", error);
   }
-  while (minute >= 60) {
-    minute -= 60;
-    hour += 1;
-  }
-  hour = (hour + hourDelta) % 24;
-  if (hour < 0) hour += 24;
-  selected.setHours(hour, minute, 0, 0);
-  setMeetingDateValue(selected);
-  renderDatePicker();
 };
 
-const openDatePicker = () => {
-  if (!datePicker) return;
-  pickerOpen = true;
-  datePicker.classList.add("is-open");
-  datePicker.setAttribute("aria-hidden", "false");
-  const selected = getSelectedDate();
-  pickerMonth = new Date(selected.getFullYear(), selected.getMonth(), 1);
-  renderDatePicker();
-};
-
-const closeDatePicker = () => {
-  if (!datePicker) return;
-  pickerOpen = false;
-  datePicker.classList.remove("is-open");
-  datePicker.setAttribute("aria-hidden", "true");
+const runPanelCommand = async (command) => {
+  switch (command) {
+    case "new-note":
+      await handleClear();
+      return;
+    case "save-note":
+      await handleSave();
+      return;
+    case "save-note-as":
+      // A command event is not a side-panel click, so it cannot reliably
+      // open File System Access' directory picker. The Downloads Save As
+      // dialog remains a keyboard-safe equivalent.
+      await handleSaveAs({ preferDirectoryPicker: false });
+      return;
+    case "open-library":
+      setLibraryViewOpen(true);
+      return;
+    case "detach-sidebar":
+      await detachSidebar();
+      return;
+    case "reattach-sidebar":
+      await reattachSidebar();
+      return;
+    case "toggle-title-lock":
+      setTitleLocked(!state.title.locked);
+      if (!state.title.locked) updateTitleFromActiveTab().catch(() => {});
+      return;
+    case "open-date-picker":
+      datePickerController.open();
+      return;
+    case "set-date-time-now":
+      datePickerController.setNow();
+      return;
+    case "previous-month":
+      datePickerController.shiftMonth(-1);
+      return;
+    case "next-month":
+      datePickerController.shiftMonth(1);
+      return;
+    case "set-date-picker-today":
+      datePickerController.setToday();
+      return;
+    case "close-date-picker":
+      datePickerController.close();
+      return;
+    case "decrease-hour":
+      datePickerController.adjustTime({ hourDelta: -1 });
+      return;
+    case "increase-hour":
+      datePickerController.adjustTime({ hourDelta: 1 });
+      return;
+    case "decrease-minute":
+      datePickerController.adjustTime({ minuteDelta: -1 });
+      return;
+    case "increase-minute":
+      datePickerController.adjustTime({ minuteDelta: 1 });
+      return;
+    case "add-page-selection":
+      addPendingPageSelection();
+      return;
+    case "dismiss-page-selection":
+      clearPendingPageSelection();
+      return;
+    case "format-bold":
+      applyFormat("bold");
+      return;
+    case "format-italic":
+      applyFormat("italic");
+      return;
+    case "format-heading":
+      applyFormat("heading");
+      return;
+    case "format-bullet-list":
+      applyFormat("ul");
+      return;
+    case "format-numbered-list":
+      applyFormat("ol");
+      return;
+    case "format-inline-code":
+      applyFormat("code");
+      return;
+    case "format-code-block":
+      applyFormat("codeblock");
+      return;
+    case "format-highlight":
+      applyFormat("highlight");
+      return;
+    case "insert-timestamp":
+      applyFormat("timestamp");
+      return;
+    case "focus-library-search":
+      setLibraryViewOpen(true);
+      librarySearchInput?.focus();
+      return;
+    case "export-library":
+      setLibraryViewOpen(true);
+      await exportAllNotes();
+      return;
+    case "toggle-library-current-site":
+      setLibraryViewOpen(true);
+      toggleLibraryCurrentSiteFilter();
+      return;
+    case "toggle-library-multi-select":
+      setLibraryViewOpen(true);
+      toggleLibraryMultiSelectMode();
+      return;
+    case "delete-selected-library-notes":
+      setLibraryViewOpen(true);
+      await deleteSelectedLibraryEntries();
+      return;
+    default:
+      throw new Error(`Unknown panel command: ${command}`);
+  }
 };
 
 const init = async () => {
@@ -2550,8 +2255,11 @@ const init = async () => {
       TITLE_LOCK_KEY,
       ONBOARDING_HINT_KEY,
     ]);
-    if (Object.prototype.hasOwnProperty.call(result, TITLE_LOCK_KEY) && !storageState.refreshed[TITLE_LOCK_KEY]) {
-      titleLocked = Boolean(result[TITLE_LOCK_KEY]);
+    if (
+      Object.prototype.hasOwnProperty.call(result, TITLE_LOCK_KEY) &&
+      !state.storage.refreshed[TITLE_LOCK_KEY]
+    ) {
+      state.title.locked = Boolean(result[TITLE_LOCK_KEY]);
     }
     if (onboardingHint && !result[ONBOARDING_HINT_KEY]) {
       onboardingHint.hidden = false;
@@ -2561,17 +2269,18 @@ const init = async () => {
       setFormData(draft);
     } else {
       meetingDateInput.value = toLocalDateTimeValue();
-      updateMeetingDateDisplay(meetingDateInput.value);
+      datePickerController.updateDisplay();
     }
   } catch (error) {
     reportError("Couldn't load the saved draft.", error);
     meetingDateInput.value = toLocalDateTimeValue();
-    updateMeetingDateDisplay(meetingDateInput.value);
+    datePickerController.updateDisplay();
   }
   updateTitleLockButton();
-  userEditedTitle = Boolean(meetingNameInput.value.trim());
+  state.title.userEdited = Boolean(meetingNameInput.value.trim());
+  state.initialized = true;
   if (draft && Number.isInteger(draft.cursorOffset)) {
-    lastCaretOffset = draft.cursorOffset;
+    state.editor.lastCaretOffset = draft.cursorOffset;
     if (draft.editorFocused) {
       notesInput.focus();
       requestAnimationFrame(() => restoreCaretOffset(draft.cursorOffset));
@@ -2597,11 +2306,11 @@ const init = async () => {
   // again after this reload) — every other case is covered by the
   // autosave in saveDraft() reacting to the next edit. Deliberately checks
   // body text directly rather than hasRealNoteContent()'s title fallback:
-  // init() always sets userEditedTitle from whatever title the draft
+  // init() always sets state.title.userEdited from whatever title the draft
   // happened to have (see above), even if it was only ever auto-filled,
   // so the title-based signal isn't trustworthy immediately after a
   // reload the way it is when it's set live by the user actually typing.
-  if (notesInput.textContent.trim()) {
+  if (hasNoteContent()) {
     saveNoteToLibrary(getFormData()).catch(() => {});
   }
 };
@@ -2609,7 +2318,7 @@ const init = async () => {
 attachTabListeners();
 
 titleLockButton?.addEventListener("click", () => {
-  const nextValue = !titleLocked;
+  const nextValue = !state.title.locked;
   setTitleLocked(nextValue);
   if (!nextValue) {
     updateTitleFromActiveTab().catch(() => {});
@@ -2677,97 +2386,10 @@ notesInput.addEventListener("drop", (event) => {
 
 // Removed toggle controls; source is always appended to notes.
 
-setNowButton.addEventListener("click", () => {
-  setMeetingDateValue(new Date());
-  renderDatePicker();
-});
-
-openDatePickerButton?.addEventListener("click", openDatePicker);
-meetingDateDisplay?.addEventListener("click", openDatePicker);
-meetingDateDisplay?.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    openDatePicker();
-  }
-});
-datePrev?.addEventListener("click", () => {
-  if (!pickerMonth) return;
-  pickerMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1);
-  renderDatePicker();
-});
-dateNext?.addEventListener("click", () => {
-  if (!pickerMonth) return;
-  pickerMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1);
-  renderDatePicker();
-});
-dateGrid?.addEventListener("keydown", (event) => {
-  const days = Array.from(dateGrid.querySelectorAll(".date-picker__day"));
-  const currentIndex = days.findIndex((d) => d.classList.contains("is-selected"));
-  let nextIndex = currentIndex;
-  if (event.key === "ArrowRight") {
-    nextIndex = Math.min(currentIndex + 1, days.length - 1);
-  } else if (event.key === "ArrowLeft") {
-    nextIndex = Math.max(currentIndex - 1, 0);
-  } else if (event.key === "ArrowDown") {
-    nextIndex = Math.min(currentIndex + 7, days.length - 1);
-  } else if (event.key === "ArrowUp") {
-    nextIndex = Math.max(currentIndex - 7, 0);
-  } else {
-    return;
-  }
-  event.preventDefault();
-  if (nextIndex !== currentIndex && days[nextIndex]) {
-    const dateStr = days[nextIndex].dataset.date;
-    if (dateStr) {
-      const parts = dateStr.split("-").map(Number);
-      const updated = new Date(parts[0], parts[1] - 1, parts[2]);
-      setMeetingDateValue(updated);
-      renderDatePicker();
-    }
-    days[nextIndex].focus();
-  }
-});
-
-dateToday?.addEventListener("click", () => {
-  setMeetingDateValue(new Date());
-  pickerMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  renderDatePicker();
-});
-dateDone?.addEventListener("click", closeDatePicker);
-timeHourDec?.addEventListener("click", () => adjustTime({ hourDelta: -1 }));
-timeHourInc?.addEventListener("click", () => adjustTime({ hourDelta: 1 }));
-timeMinuteDec?.addEventListener("click", () => adjustTime({ minuteDelta: -1 }));
-timeMinuteInc?.addEventListener("click", () => adjustTime({ minuteDelta: 1 }));
-
-document.addEventListener("click", (event) => {
-  if (!pickerOpen || !datePicker) return;
-  const target = event.target;
-  if (
-    target instanceof Node &&
-    (datePicker.contains(target) ||
-      openDatePickerButton?.contains(target) ||
-      meetingDateDisplay?.contains(target))
-  ) {
-    return;
-  }
-  closeDatePicker();
-});
-
-// No global app shortcuts (Save/Save As/New note/Library toggle) — removed
-// at the user's direction after every combo tried (Cmd/Ctrl+S,
-// Cmd/Ctrl+Shift+S, Cmd/Ctrl+Alt+N, Alt+L) failed to reach the page on
-// their real machine. See docs/plan/roadmap.md. Escape still closes the
-// date picker — original behavior, predates any of this.
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && pickerOpen) {
-    closeDatePicker();
-  }
-});
-
 window.addEventListener("beforeunload", () => {
   saveDraft();
-  if (panelTabId) {
-    chrome.runtime.sendMessage({ type: "PANEL_CLOSE", tabId: panelTabId }, () => {
+  if (state.page.panelTabId) {
+    chrome.runtime.sendMessage({ type: "PANEL_CLOSE", tabId: state.page.panelTabId }, () => {
       if (chrome.runtime.lastError) {
         // Background may be sleeping; ignore.
       }
@@ -2779,7 +2401,7 @@ saveButton.addEventListener("click", handleSave);
 saveAsBtn?.addEventListener("click", handleSaveAs);
 clearButton.addEventListener("click", handleClear);
 libraryToggleBtn?.addEventListener("click", () => {
-  setLibraryViewOpen(!libraryViewOpen);
+  setLibraryViewOpen(!state.library.viewOpen);
 });
 librarySearchInput?.addEventListener("input", () => {
   renderLibraryList(librarySearchInput.value);
@@ -2792,60 +2414,19 @@ libraryImportInput?.addEventListener("change", () => {
   if (file) importLibraryEntryFromFile(file);
 });
 librarySortSelect?.addEventListener("change", () => {
-  librarySortMode = librarySortSelect.value;
+  state.library.sortMode = librarySortSelect.value;
   renderLibraryList(librarySearchInput?.value || "");
 });
-libraryFilterSiteBtn?.addEventListener("click", () => {
-  libraryFilterThisSite = !libraryFilterThisSite;
-  libraryFilterSiteBtn.classList.toggle("active", libraryFilterThisSite);
-  libraryFilterSiteBtn.setAttribute("aria-pressed", String(libraryFilterThisSite));
-  renderLibraryList(librarySearchInput?.value || "");
-});
-libraryMultiSelectBtn?.addEventListener("click", () => {
-  libraryMultiSelectMode = !libraryMultiSelectMode;
-  librarySelectedIds.clear();
-  libraryMultiSelectBtn.classList.toggle("active", libraryMultiSelectMode);
-  libraryMultiSelectBtn.setAttribute("aria-pressed", String(libraryMultiSelectMode));
-  updateLibraryBulkBar();
-  renderLibraryList(librarySearchInput?.value || "");
-});
+libraryFilterSiteBtn?.addEventListener("click", toggleLibraryCurrentSiteFilter);
+libraryMultiSelectBtn?.addEventListener("click", toggleLibraryMultiSelectMode);
 libraryBulkCancelBtn?.addEventListener("click", exitLibraryMultiSelectMode);
 libraryBulkDeleteBtn?.addEventListener("click", deleteSelectedLibraryEntries);
 onboardingHintDismiss?.addEventListener("click", () => {
   if (onboardingHint) onboardingHint.hidden = true;
   storageSet({ [ONBOARDING_HINT_KEY]: true }).catch(() => {});
 });
-openWindowButton?.addEventListener("click", async () => {
-  const tab = await getActiveTab();
-  const tabId = Number.isInteger(panelTabId) ? panelTabId : tab?.id;
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: "DETACH_AND_OPEN",
-      tabId,
-    });
-    if (!response?.ok) {
-      throw new Error(response?.error || "Detach failed.");
-    }
-  } catch (error) {
-    reportError("Couldn't detach the sidebar.", error);
-  }
-});
-
-attachWindowButton?.addEventListener("click", async () => {
-  const tabId = sourceTabId || (await getActiveTab())?.id;
-  if (!tabId) return;
-  try {
-    await chrome.sidePanel.setOptions({
-      tabId,
-      enabled: true,
-      path: "sidepanel.html",
-    });
-    await chrome.sidePanel.open({ tabId });
-    window.close();
-  } catch (error) {
-    reportError("Couldn't reattach the sidebar.", error);
-  }
-});
+openWindowButton?.addEventListener("click", detachSidebar);
+attachWindowButton?.addEventListener("click", reattachSidebar);
 
 toolbar?.addEventListener("mousedown", (e) => {
   e.preventDefault();
@@ -2874,11 +2455,12 @@ editorStack?.addEventListener("focusout", () => {
 window.addEventListener("blur", updateEditorStackFocus);
 document.addEventListener("visibilitychange", updateEditorStackFocus);
 window.addEventListener("focus", () => {
+  if (!state.initialized) return;
   updateTitleFromActiveTab().catch(() => {});
   syncPanelOpenState();
 });
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) {
+  if (!document.hidden && state.initialized) {
     updateTitleFromActiveTab().catch(() => {});
     syncPanelOpenState();
   }

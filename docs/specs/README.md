@@ -16,6 +16,7 @@ drift this doc structure exists to prevent (see
 | Spec | Covers |
 |---|---|
 | [draft-persistence.md](draft-persistence.md) | Autosave, draft restore on reopen, New note / clear |
+| [keyboard-shortcuts.md](keyboard-shortcuts.md) | Chrome-managed shortcuts and command scope |
 | [rich-text-editor.md](rich-text-editor.md) | Formatting toolbar, keyboard shortcuts, image paste/drop |
 | [page-selection-capture.md](page-selection-capture.md) | Capturing and inserting selected page text |
 | [panel-detach-reattach.md](panel-detach-reattach.md) | Docked ↔ standalone window behavior |

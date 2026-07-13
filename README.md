@@ -14,8 +14,9 @@ window, and exports clean Markdown files when you are done.
 - Includes date and time controls for the note.
 - Supports basic rich-text formatting: bold, italic, heading, bullet list,
   numbered list, inline code, code block, highlight, and a one-click
-  timestamp insert. Bold and italic have keyboard shortcuts (Cmd/Ctrl+B,
-  Cmd/Ctrl+I); other formatting commands are toolbar-only.
+  timestamp insert. Chrome-managed keyboard shortcuts are available for every
+  stable action; four common actions have defaults and the rest can be assigned
+  by the user.
 - Detects selected page text while the side panel or detached window is open and
   offers an explicit **Add selection** action.
 - Supports images explicitly pasted from the clipboard, including images copied
@@ -36,7 +37,7 @@ window, and exports clean Markdown files when you are done.
 
 ## Install From GitHub
 
-Requires Chrome 114 or newer.
+Requires Chrome 116 or newer.
 
 1. Open the GitHub repository:
    `https://github.com/acattelan77/jotit`
@@ -59,7 +60,7 @@ folder, then click **Reload** for Jot it! on `chrome://extensions`.
 
 ## Install For Development
 
-Requires Chrome 114 or newer.
+Requires Chrome 116 or newer.
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
@@ -92,6 +93,10 @@ Requires Chrome 114 or newer.
    Use **Select** to check off several notes and delete them together. Use
    **Import** to bring a previously-exported `.md` file back into the
    library. Use **Export all** to export every saved note at once.
+9. To view or customize keyboard shortcuts, open
+   `chrome://extensions/shortcuts`. Jot it! suggests Cmd/Ctrl+Shift+Y to open
+   the app, U for a new note, K to export, and L for the library. Open Jot it!
+   first before using contextual shortcuts such as formatting or date controls.
 
 ## Data And Privacy
 
@@ -123,8 +128,10 @@ the full policy.
 - `content-selection.js`: selected-text detector for web pages.
 - `sidepanel.html`: extension UI structure.
 - `sidepanel.css`: design system implementation and responsive styling.
-- `sidepanel.js`: editor behavior, local draft storage, context handling, the
-  library view, and Markdown export.
+- `sidepanel.js`: native-module entry point coordinating editor behavior,
+  context, library UI, panel lifecycle, and Chrome commands.
+- `panel/`: cohesive state, storage, date/time, date-picker, and export-service
+  modules used by the side-panel entry point.
 - `note-library.js`: IndexedDB wrapper for the note library (save, list,
   search, delete).
 - `lib/note-utils.js`: shared date, filename, URL, and Markdown helpers.

@@ -14,16 +14,12 @@ highlight (execCommand's support for these is inconsistent or nonexistent
 across browsers, hence the manual handling). No toolbar link-insert control
 — see [Links](#links) below.
 
-**Only Bold (Cmd/Ctrl+B) and Italic (Cmd/Ctrl+I) have keyboard shortcuts.**
-Every other toolbar command is mouse/tap-only. Two rounds of additional
-shortcuts (first Cmd/Ctrl+Shift+<digit/letter/;>, then
-Cmd/Ctrl+Alt+<letter>) were tried and removed the same day
-(2026-07-10) after real-world testing found they didn't reliably reach the
-page on the user's actual machine — see
-[architecture.md](../architecture.md#keyboard-shortcuts) for the full
-history. Don't reintroduce toolbar shortcuts without verifying with a real
-keypress first. Toolbar button active-state reflects current selection
-formatting via `updateToolbarState()`.
+Bold and Italic retain the browser's ordinary Cmd/Ctrl+B and Cmd/Ctrl+I
+contenteditable behavior. Every formatting command is also an unbound Chrome
+extension command that the user can assign at `chrome://extensions/shortcuts`;
+Chrome delivers it through the service worker rather than a page-level keydown
+listener. See [keyboard-shortcuts.md](keyboard-shortcuts.md). Toolbar button
+active-state reflects current selection formatting via `updateToolbarState()`.
 
 ### Timestamp
 
@@ -132,8 +128,8 @@ user types (`updateEditorStats`).
 
 - **Paste:** clipboard images (screenshot, copied image, or copied HTML
   containing an `<img>`) are accepted. Data-URI images are inserted as real
-  `<img>` elements. Supported types come from `SUPPORTED_IMAGE_TYPES` — see
-  the duplication note below.
+  `<img>` elements. Supported types and filename extensions come from the
+  shared `NoteUtils` image metadata.
 - **Remote image URLs:** pasted as HTML containing an `<img src="https://...">`
   are inserted as a non-editable `<figure class="image-attachment"
   data-jot-image-src=... data-jot-image-alt=...>` placeholder, not fetched
@@ -143,13 +139,9 @@ user types (`updateEditorStats`).
   `attachments/<note>-image-N.<ext>` relative paths and the note is exported
   as a folder rather than a single file.
 
-**Known duplication:** `SUPPORTED_IMAGE_TYPES`/`SUPPORTED_IMAGE_EXTENSIONS`
-and `getImageExtensionFromUrl` exist independently in both
-`lib/note-utils.js` and `sidepanel.js` with slightly different shapes (Set
-vs. Map). Adding a new supported image format requires updating both — see
-the backlog in [`../plan/roadmap.md`](../plan/roadmap.md). Until that's
-consolidated, **always update both locations together** or the two will
-silently disagree about what's supported.
+Remote images are fetched once while the export package is prepared. Their
+validated response MIME type determines the attachment extension, avoiding a
+misleading `.png` fallback for extensionless or incorrectly named URLs.
 
 ## Links
 

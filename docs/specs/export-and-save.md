@@ -33,9 +33,9 @@ they're easy to regress:
 
 ## Save vs. Save As
 
-Both paths independently: build form data, build filename, convert editor
-HTML to Markdown, build the full document, rewrite image references via
-`buildObsidianImageExport()`.
+Both paths use `exportService.prepareNoteExport()`
+(`panel/export-service.mjs`) to build form data, filename, Markdown,
+frontmatter, and rewritten image attachments once.
 
 - **Save** (`handleSave`): `chrome.downloads.download({saveAs:false})`
   first (no dialog); on error, retries with `saveAs:true`.
@@ -43,16 +43,14 @@ HTML to Markdown, build the full document, rewrite image references via
   System Access API) first, writing files directly via
   `FileSystemDirectoryHandle` if the user's Chrome supports it; otherwise
   falls back to `chrome.downloads.download({saveAs: !hasAttachments})`.
+  When invoked by a Chrome extension command, it deliberately skips the
+  directory picker (which requires a direct panel click) and uses the Chrome
+  Downloads Save As dialog instead.
 
-**Known duplication:** these two handlers currently duplicate a large
-fraction of this logic with subtly different fallback tiers (see
-[`../plan/roadmap.md`](../plan/roadmap.md)). A behavior change to one
-(e.g., a new frontmatter field, a new attachment naming rule) must currently
-be applied to both or they will silently diverge — until they're
-consolidated behind a shared function, **treat any export-logic change as
-needing to touch both `handleSave` and `handleSaveAs`**, and verify both
-paths manually (see [`AGENTS.md`](../../AGENTS.md) / the repo's `verify`
-skill) since there's no automated test coverage for either.
+The write mechanisms remain intentionally distinct: Save uses Downloads with
+a Save As fallback, while Save As prefers the File System Access API. Changes
+to export construction belong in `panel/export-service.mjs`; changes to
+handler orchestration still need both paths verified.
 
 ## Non-goals
 

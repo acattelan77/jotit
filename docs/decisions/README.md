@@ -39,6 +39,8 @@ one of those don't need an ADR — put that context in the relevant
 | [0002](0002-storage-local-shared-state.md) | `chrome.storage.local` as the only cross-context shared state | Accepted |
 | [0003](0003-hand-rolled-markdown-conversion.md) | Hand-rolled Markdown↔HTML conversion and YAML frontmatter serialization | Accepted |
 | [0004](0004-local-first-no-telemetry.md) | Local-first, no telemetry, no external servers | Accepted |
-| [0005](0005-single-file-sidepanel-controller.md) | Single-file `sidepanel.js` controller instead of split modules | Accepted |
+| [0005](0005-single-file-sidepanel-controller.md) | Single-file `sidepanel.js` controller instead of split modules | Superseded by 0009 |
 | [0006](0006-note-library-via-indexeddb.md) | Local note library, stored in IndexedDB, scoped to the panel document | Accepted (decision 2 superseded by 0007) |
 | [0007](0007-autosave-to-library.md) | Note library entries are created automatically on autosave, not only on explicit Save/Save As | Accepted |
+| [0008](0008-chrome-extension-commands.md) | Chrome extension commands for configurable shortcuts | Accepted |
+| [0009](0009-native-sidepanel-modules.md) | Native modules for cohesive side-panel responsibilities | Accepted |

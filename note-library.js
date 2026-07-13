@@ -9,11 +9,17 @@
 
   const openDb = () => {
     if (dbPromise) return dbPromise;
+    if (typeof indexedDB === "undefined") {
+      return Promise.reject(new Error("IndexedDB is not available."));
+    }
     dbPromise = new Promise((resolve, reject) => {
-      if (typeof indexedDB === "undefined") {
-        reject(new Error("IndexedDB is not available."));
-        return;
-      }
+      let settled = false;
+      const failOpen = (error) => {
+        if (settled) return;
+        settled = true;
+        dbPromise = null;
+        reject(error || new Error("Couldn't open the note library."));
+      };
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = () => {
         const db = request.result;
@@ -24,8 +30,22 @@
           });
         }
       };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        if (settled) {
+          db.close();
+          return;
+        }
+        settled = true;
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+        };
+        resolve(db);
+      };
+      request.onerror = () => failOpen(request.error);
+      request.onblocked = () =>
+        failOpen(new Error("The note library is blocked by another open window."));
     });
     return dbPromise;
   };

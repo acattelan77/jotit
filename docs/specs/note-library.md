@@ -32,7 +32,8 @@ ADR-0006).
   also keeps the library entry up to date — one write path, not two.
 - "Real content" excludes an editor that only has an auto-filled title
   (from the active tab) and no body text — otherwise opening the panel on
-  any page would spawn an empty library entry. See `hasRealNoteContent()`
+  any page would spawn an empty library entry. Text, formatting blocks, and
+  embedded images all count as body content. See `hasRealNoteContent()`
   in [architecture.md](../architecture.md#note-library-indexeddb).
 - **Save and Save As do not touch the library.** They are pure disk-export
   actions — build the `.md` file, download/write it, done. The library
@@ -117,6 +118,8 @@ Blobs" deviation note for why that turned out to be unnecessary complexity.
 - Pinning/unpinning does **not** change the note's `updatedAt` — it's a
   display-order preference, not an edit. See
   [architecture.md](../architecture.md#note-library-indexeddb).
+- Later content autosaves preserve the pin state instead of replacing the
+  entry with a shape that omits `pinned`.
 
 ### Sorting and filtering
 
@@ -187,11 +190,10 @@ an Obsidian vault, without opening and re-saving each note individually.
   scheme (`buildFilename`), same image-attachment handling. No new export
   format; this is "do Save As for everything," not a new serialization. Each
   note's `pages_visited` frontmatter must reflect *that note's own* page
-  history, not whatever's currently loaded in the live editor —
-  `buildYamlFrontmatter` reads page history off module-level state, so
-  `exportAllNotes` swaps that state to each entry's own history for the
-  duration of its export and restores the live editor's actual history
-  (`finally`) no matter how the loop ends. Verified directly: exporting two
+  history, not whatever's currently loaded in the live editor.
+  `buildMarkdown`/`buildYamlFrontmatter` receive the entry's history
+  explicitly, so asynchronous export work never mutates live editor state.
+  Verified directly: exporting two
   library entries with different page histories produces two files with
   correctly distinct `pages_visited` blocks, and the live editor's own
   history is intact afterward.

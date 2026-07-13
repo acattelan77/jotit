@@ -3,7 +3,7 @@
   "name": "Jot it!",
   "version": "1.3.0",
   "description": "Quick notes in a side panel while you browse.",
-  "minimum_chrome_version": "114",
+  "minimum_chrome_version": "116",
   "action": {
     "default_title": "Jot it!",
     "default_icon": {
@@ -27,8 +27,63 @@
   },
   "commands": {
     "open-jot-it": {
-      "description": "Open Jot it (side panel with popup fallback)"
-    }
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Open Jot it"
+    },
+    "new-note": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Start a new note"
+    },
+    "save-note": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Export note to Downloads"
+    },
+    "open-library": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Open note library"
+    },
+    "save-note-as": { "description": "Save note as" },
+    "detach-sidebar": { "description": "Detach sidebar" },
+    "reattach-sidebar": { "description": "Reattach sidebar" },
+    "toggle-title-lock": { "description": "Toggle context-title lock" },
+    "open-date-picker": { "description": "Open date and time picker" },
+    "set-date-time-now": { "description": "Set note date and time to now" },
+    "previous-month": { "description": "Show previous month in date picker" },
+    "next-month": { "description": "Show next month in date picker" },
+    "set-date-picker-today": { "description": "Set date picker to today" },
+    "close-date-picker": { "description": "Close date picker" },
+    "decrease-hour": { "description": "Decrease hour" },
+    "increase-hour": { "description": "Increase hour" },
+    "decrease-minute": { "description": "Decrease minute" },
+    "increase-minute": { "description": "Increase minute" },
+    "add-page-selection": { "description": "Add pending page selection" },
+    "dismiss-page-selection": { "description": "Dismiss pending page selection" },
+    "format-bold": { "description": "Toggle bold" },
+    "format-italic": { "description": "Toggle italic" },
+    "format-heading": { "description": "Toggle heading" },
+    "format-bullet-list": { "description": "Toggle bullet list" },
+    "format-numbered-list": { "description": "Toggle numbered list" },
+    "format-inline-code": { "description": "Toggle inline code" },
+    "format-code-block": { "description": "Toggle code block" },
+    "format-highlight": { "description": "Toggle highlight" },
+    "insert-timestamp": { "description": "Insert timestamp" },
+    "focus-library-search": { "description": "Focus library search" },
+    "export-library": { "description": "Export all library notes" },
+    "toggle-library-current-site": { "description": "Toggle current-site library filter" },
+    "toggle-library-multi-select": { "description": "Toggle library multi-select" },
+    "delete-selected-library-notes": { "description": "Delete selected library notes" }
   },
   "content_security_policy": {
     "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src http: https:; object-src 'none'; base-uri 'none'; frame-src 'none'"

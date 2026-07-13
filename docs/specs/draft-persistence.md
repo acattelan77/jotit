@@ -14,7 +14,8 @@ trigger for that.
 
 - Every edit to the note (title, date, editor content) triggers
   `debouncedSaveDraft()` — a 300ms debounce, not instant — before writing to
-  `chrome.storage.local["noteDraft"]`. The same call
+  `chrome.storage.local["noteDraft"]`. Storage Promise wrappers and the
+  cancellable debounce live in `panel/storage.mjs`. The same call
   (`saveDraft()`/`sidepanel.js`) also syncs the note library if the note has
   real content — see [note-library.md](note-library.md) and
   [ADR-0007](../decisions/0007-autosave-to-library.md) — independently of

@@ -23,6 +23,50 @@ void configurePanelBehavior();
 const detachedWindows = new Map();
 const openPanelTabs = new Set();
 const DEBUG_KEY = "debugLogsEnabled";
+const PANEL_COMMANDS = new Set([
+  "new-note",
+  "save-note",
+  "save-note-as",
+  "open-library",
+  "detach-sidebar",
+  "reattach-sidebar",
+  "toggle-title-lock",
+  "open-date-picker",
+  "set-date-time-now",
+  "previous-month",
+  "next-month",
+  "set-date-picker-today",
+  "close-date-picker",
+  "decrease-hour",
+  "increase-hour",
+  "decrease-minute",
+  "increase-minute",
+  "add-page-selection",
+  "dismiss-page-selection",
+  "format-bold",
+  "format-italic",
+  "format-heading",
+  "format-bullet-list",
+  "format-numbered-list",
+  "format-inline-code",
+  "format-code-block",
+  "format-highlight",
+  "insert-timestamp",
+  "focus-library-search",
+  "export-library",
+  "toggle-library-current-site",
+  "toggle-library-multi-select",
+  "delete-selected-library-notes",
+]);
+const OPEN_IF_NEEDED_COMMANDS = new Set(["new-note", "open-library"]);
+const RESTRICTED_MESSAGE_TYPES = new Set([
+  "DETACH_AND_OPEN",
+  "REGISTER_DETACH_WINDOW",
+  "PANEL_OPEN",
+  "PANEL_OPEN_ACTIVE",
+  "PANEL_CLOSE",
+]);
+let pendingPanelCommands = [];
 let debugEnabled = false;
 let debugLogs = [];
 
@@ -196,11 +240,6 @@ const openDetachedPanelWindowForTab = async (tab, source = "unknown") => {
       path: "sidepanel.html",
     });
     openPanelTabs.delete(tab.id);
-    chrome.tabs.sendMessage(tab.id, { type: "PANEL_CLOSE" }, () => {
-      if (chrome.runtime.lastError) {
-        // Ignore if the content script isn't available on this tab.
-      }
-    });
     debugLog("background", "DETACH_PANEL (pre-open)", { tabId: tab.id, source });
   } catch (error) {
     debugLog("background", "DETACH_PANEL failed (pre-open)", {
@@ -301,11 +340,6 @@ const openSidePanelFromActionClick = async (clickedTab) => {
   openPanelTabs.add(tabId);
   debugLog("background", "ACTION_CLICK open", { tabId });
   await ensureSelectionScript(tabId);
-  chrome.tabs.sendMessage(tabId, { type: "PANEL_OPEN" }, () => {
-    if (chrome.runtime.lastError) {
-      // Ignore if the content script isn't available on this tab.
-    }
-  });
 };
 
 chrome.action.onClicked.addListener((tab) => {
@@ -321,17 +355,61 @@ chrome.action.onClicked.addListener((tab) => {
   })();
 });
 
-chrome.commands?.onCommand.addListener((command) => {
-  if (command !== "open-jot-it") return;
-  (async () => {
-    try {
-      await openSidePanelFromActionClick();
-    } catch (error) {
-      debugLog("background", "COMMAND open-jot-it failed", {
-        error: String(error),
+const sendPanelCommand = (command, { openIfNeeded = false } = {}) => {
+  chrome.runtime.sendMessage({ type: "RUN_PANEL_COMMAND", command }, (response) => {
+    if (chrome.runtime.lastError) {
+      debugLog("background", "COMMAND panel unavailable", {
+        command,
+        error: chrome.runtime.lastError.message || "",
+      });
+      if (openIfNeeded) {
+        const shouldOpenPanel = pendingPanelCommands.length === 0;
+        pendingPanelCommands.push(command);
+        if (!shouldOpenPanel) return;
+        openSidePanelFromActionClick().catch((error) => {
+          pendingPanelCommands = [];
+          debugLog("background", "COMMAND open panel failed", {
+            command,
+            error: String(error),
+          });
+        });
+      }
+      return;
+    }
+    if (!response?.ok) {
+      debugLog("background", "COMMAND panel failed", {
+        command,
+        error: response?.error || "Unknown error.",
       });
     }
-  })();
+  });
+};
+
+const flushPendingPanelCommands = () => {
+  const commands = pendingPanelCommands;
+  pendingPanelCommands = [];
+  commands.forEach((command) => sendPanelCommand(command));
+};
+
+chrome.commands?.onCommand.addListener((command) => {
+  if (command === "open-jot-it") {
+    (async () => {
+      try {
+        await openSidePanelFromActionClick();
+      } catch (error) {
+        debugLog("background", "COMMAND open-jot-it failed", {
+          error: String(error),
+        });
+      }
+    })();
+    return;
+  }
+
+  if (!PANEL_COMMANDS.has(command)) return;
+
+  sendPanelCommand(command, {
+    openIfNeeded: OPEN_IF_NEEDED_COMMANDS.has(command),
+  });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -341,36 +419,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const isTrustedSender =
     sender?.id === chrome.runtime.id && senderUrl.startsWith(trustedOrigin);
 
-  const restrictedTypes = new Set([
-    "DETACH_PANEL",
-    "DETACH_AND_OPEN",
-    "REGISTER_DETACH_WINDOW",
-    "PANEL_OPEN",
-    "PANEL_CLOSE",
-  ]);
-
-  if (restrictedTypes.has(message.type) && !isTrustedSender) {
+  if (RESTRICTED_MESSAGE_TYPES.has(message.type) && !isTrustedSender) {
     sendResponse({ ok: false, error: "Untrusted sender." });
     return;
-  }
-
-  if (message.type === "DETACH_PANEL" && Number.isInteger(message.tabId)) {
-    (async () => {
-      try {
-        await ensurePanelOptions(message.tabId, "detach_panel");
-        await chrome.sidePanel.setOptions({
-          tabId: message.tabId,
-          enabled: false,
-          path: "sidepanel.html",
-        });
-        debugLog("background", "DETACH_PANEL", { tabId: message.tabId });
-        await ensureSelectionScript(message.tabId);
-        sendResponse({ ok: true });
-      } catch (error) {
-        sendResponse({ ok: false, error: String(error) });
-      }
-    })();
-    return true;
   }
 
   if (message.type === "DETACH_AND_OPEN") {
@@ -410,12 +461,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     openPanelTabs.add(message.tabId);
     debugLog("background", "PANEL_OPEN", { tabId: message.tabId });
     void ensureSelectionScript(message.tabId);
-    chrome.tabs.sendMessage(message.tabId, { type: "PANEL_OPEN" }, () => {
-      if (chrome.runtime.lastError) {
-        // Ignore if the content script isn't available on this tab.
-      }
-    });
     sendResponse({ ok: true });
+    flushPendingPanelCommands();
     return;
   }
 
@@ -429,12 +476,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       openPanelTabs.add(tab.id);
       debugLog("background", "PANEL_OPEN_ACTIVE", { tabId: tab.id });
       ensureSelectionScript(tab.id);
-      chrome.tabs.sendMessage(tab.id, { type: "PANEL_OPEN" }, () => {
-        if (chrome.runtime.lastError) {
-          // Ignore if the content script isn't available on this tab.
-        }
-      });
       sendResponse({ ok: true, tabId: tab.id });
+      flushPendingPanelCommands();
     })();
     return true;
   }
@@ -442,18 +485,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "PANEL_CLOSE" && Number.isInteger(message.tabId)) {
     openPanelTabs.delete(message.tabId);
     debugLog("background", "PANEL_CLOSE", { tabId: message.tabId });
-    chrome.tabs.sendMessage(message.tabId, { type: "PANEL_CLOSE" }, () => {
-      if (chrome.runtime.lastError) {
-        // Ignore if the content script isn't available on this tab.
-      }
-    });
     sendResponse({ ok: true });
-    return;
-  }
-
-  if (message.type === "PANEL_STATE") {
-    const tabId = sender?.tab?.id;
-    sendResponse({ open: Number.isInteger(tabId) && openPanelTabs.has(tabId) });
     return;
   }
 
