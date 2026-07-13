@@ -2110,6 +2110,17 @@ const detachSidebar = async () => {
     if (!response?.ok) {
       throw new Error(response?.error || "Detach failed.");
     }
+    if (!isStandalone) {
+      saveDraft();
+      if (Number.isInteger(tabId)) {
+        chrome.runtime.sendMessage({ type: "PANEL_CLOSE", tabId }, () => {
+          if (chrome.runtime.lastError) {
+            // Background may be sleeping; ignore.
+          }
+        });
+      }
+      window.close();
+    }
   } catch (error) {
     reportError("Couldn't detach the sidebar.", error);
   }

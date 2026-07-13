@@ -13,6 +13,10 @@ another window — and bring it back later without losing draft state.
   (`sidePanel.setOptions({enabled:false})`) and opens a
   `chrome.windows.create({type:"popup"})`
   window at `sidepanel.html?standalone=1&sourceTabId=<id>&sourceTitle=...&sourceUrl=...`.
+  After background confirms the popup exists, the docked panel saves its draft,
+  unregisters itself as open for the source tab, and closes itself. Disabling
+  the side panel prevents reopening for that tab, but does not by itself close
+  a side panel document that Chrome is already showing.
 - **Standalone document behavior:** detects `isStandalone` from the URL
   params. Title/URL auto-fill and tab-change listeners key off
   `sourceTabId` (via `chrome.tabs.get`/`chrome.tabs.onUpdated`) instead of
