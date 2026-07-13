@@ -3,13 +3,14 @@
 ## Purpose
 
 Turn the in-progress note into a portable `.md` file (plus attachments, if
-any) that works well as an Obsidian vault note. **This is disk export
-only.** Since [ADR-0007](../decisions/0007-autosave-to-library.md), Save and
-Save As have no other effect — they don't touch the
-[note library](note-library.md), which is kept up to date automatically by
-autosave regardless of whether the user ever exports. Don't reintroduce a
-library-write side effect here; if you're tempted to, read ADR-0007 first —
-that's exactly the design it replaced.
+any) that works well as an Obsidian vault note. Save and Save As are still
+disk-export actions, not a separate "save to library" workflow; since
+[ADR-0007](../decisions/0007-autosave-to-library.md), the
+[note library](note-library.md) is maintained by autosave. Export actions
+must, however, flush the visible editor state through that same autosave path
+before preparing/writing the file. This keeps the exported file, local draft,
+and library entry from diverging when the user exports immediately after an
+edit.
 
 ## Output shape
 
@@ -38,19 +39,27 @@ Both paths use `exportService.prepareNoteExport()`
 frontmatter, and rewritten image attachments once.
 
 - **Save** (`handleSave`): `chrome.downloads.download({saveAs:false})`
-  first (no dialog); on error, retries with `saveAs:true`.
+  first (no dialog); on error, retries with `saveAs:true`. It calls
+  `saveDraft()` before reading form data for export.
 - **Save As** (`handleSaveAs`): tries `window.showDirectoryPicker()` (File
   System Access API) first, writing files directly via
   `FileSystemDirectoryHandle` if the user's Chrome supports it; otherwise
   falls back to `chrome.downloads.download({saveAs: !hasAttachments})`.
   When invoked by a Chrome extension command, it deliberately skips the
   directory picker (which requires a direct panel click) and uses the Chrome
-  Downloads Save As dialog instead.
+  Downloads Save As dialog instead. When the directory picker is used, the
+  picker must run before `saveDraft()` to preserve Chrome's user-gesture
+  requirement; after the picker returns, `saveDraft()` runs before export
+  construction.
 
 The write mechanisms remain intentionally distinct: Save uses Downloads with
 a Save As fallback, while Save As prefers the File System Access API. Changes
 to export construction belong in `panel/export-service.mjs`; changes to
 handler orchestration still need both paths verified.
+
+**Export all** also flushes the current editor draft before listing library
+entries, otherwise the current note can be missing the user's last edit in the
+bulk export.
 
 ## Non-goals
 

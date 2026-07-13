@@ -73,4 +73,20 @@ describe("extension package integrity", () => {
 
     assert.deepEqual([...allowed].sort(), [...declared].sort());
   });
+
+  it("flushes visible editor state before explicit exports", () => {
+    const source = read("sidepanel.js");
+    assert.match(
+      source,
+      /const handleSave = async \(\) => \{\n\s+await saveDraft\(\);\n\s+const data = getFormData\(\);/
+    );
+    assert.match(
+      source,
+      /const handleSaveAs = async \(\{ preferDirectoryPicker = true \} = \{\}\) => \{[\s\S]*?\n\s+await saveDraft\(\);\n\s+const data = getFormData\(\);/
+    );
+    assert.match(
+      source,
+      /const exportAllNotes = async \(\) => \{[\s\S]*?\n\s+await saveDraft\(\);\n\n\s+let entries;/
+    );
+  });
 });

@@ -40,3 +40,12 @@ export const createPanelState = () => ({
   debugEnabled: false,
   initialized: false,
 });
+
+export const resetTitleTrackingForNewNote = (state) => {
+  if (!state?.title) return;
+  state.title.lastAutomatic = "";
+  state.title.currentPage = "";
+  state.title.userEdited = false;
+  state.title.lastTabId = null;
+  state.title.lastTabUrl = "";
+};

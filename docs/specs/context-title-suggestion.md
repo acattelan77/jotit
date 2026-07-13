@@ -40,3 +40,7 @@ determine the current hostname, was kept — the library's "this site" filter
 - Auto-fill must not fire after the note body has content and the title is
   already non-empty. This preserves the research workflow where one note
   accumulates excerpts from multiple tabs/articles.
+- Creating a **New note** must reset the previous note's title-edit tracking
+  before auto-fill runs. A custom title on the old note must not make the new
+  empty note look user-edited, otherwise the current page title will not be
+  captured.

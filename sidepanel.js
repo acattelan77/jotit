@@ -1,7 +1,7 @@
 import { createDatePicker } from "./panel/date-picker.mjs";
 import { pad2, toLocalDateTimeValue } from "./panel/date-time.mjs";
 import { createExportService } from "./panel/export-service.mjs";
-import { createPanelState } from "./panel/state.mjs";
+import { createPanelState, resetTitleTrackingForNewNote } from "./panel/state.mjs";
 import { createStorage, debounce } from "./panel/storage.mjs";
 
 const STORAGE_KEY = "noteDraft";
@@ -1689,6 +1689,19 @@ const importLibraryEntryFromFile = async (file) => {
 // written into one shared destination and need distinguishable paths.
 // See docs/specs/note-library.md.
 const exportAllNotes = async () => {
+  let directoryHandle = null;
+  if (typeof window.showDirectoryPicker === "function") {
+    try {
+      directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      reportError("Couldn't open folder picker.", error);
+      return;
+    }
+  }
+
+  await saveDraft();
+
   let entries;
   try {
     entries = await NoteLibrary.listEntries();
@@ -1699,17 +1712,6 @@ const exportAllNotes = async () => {
   if (!entries.length) {
     showToast("No saved notes to export", { timeoutMs: 1800 });
     return;
-  }
-
-  let directoryHandle = null;
-  if (typeof window.showDirectoryPicker === "function") {
-    try {
-      directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
-    } catch (error) {
-      if (error?.name === "AbortError") return;
-      reportError("Couldn't open folder picker.", error);
-      return;
-    }
   }
 
   let successCount = 0;
@@ -1762,6 +1764,7 @@ const exportAllNotes = async () => {
 };
 
 const handleSave = async () => {
+  await saveDraft();
   const data = getFormData();
   let prepared;
   try {
@@ -1809,7 +1812,6 @@ const handleSave = async () => {
 };
 
 const handleSaveAs = async ({ preferDirectoryPicker = true } = {}) => {
-  const data = getFormData();
   let directoryHandle = null;
   if (preferDirectoryPicker && typeof window.showDirectoryPicker === "function") {
     try {
@@ -1820,6 +1822,8 @@ const handleSaveAs = async ({ preferDirectoryPicker = true } = {}) => {
       return;
     }
   }
+  await saveDraft();
+  const data = getFormData();
   let prepared;
   try {
     prepared = await prepareNoteExport(data);
@@ -1891,6 +1895,7 @@ const handleClear = async () => {
     notes: "",
     pageHistory: [],
   });
+  resetTitleTrackingForNewNote(state);
   state.page.history = [];
   updateTitleFromActiveTab().catch(() => {});
   try {

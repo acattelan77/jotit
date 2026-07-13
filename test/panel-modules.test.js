@@ -40,6 +40,32 @@ describe("panel state module", () => {
     assert.deepEqual(second.page.history, []);
     assert.deepEqual(second.storage.refreshed, {});
   });
+
+  it("resets title auto-fill guards for a new note", async () => {
+    const {
+      createPanelState,
+      resetTitleTrackingForNewNote,
+    } = await importPanelModule("state.mjs");
+    const state = createPanelState();
+    Object.assign(state.title, {
+      lastAutomatic: "Old page",
+      currentPage: "Old page",
+      userEdited: true,
+      lastTabId: 7,
+      lastTabUrl: "https://example.com/old",
+    });
+
+    resetTitleTrackingForNewNote(state);
+
+    assert.deepEqual(state.title, {
+      lastAutomatic: "",
+      currentPage: "",
+      userEdited: false,
+      lastTabId: null,
+      lastTabUrl: "",
+      locked: false,
+    });
+  });
 });
 
 describe("panel storage module", () => {
