@@ -71,7 +71,15 @@ delete it (keeps the history legible instead of silently vanishing).
    `GO_LIVE_PLAN.md`/`RELEASE_CHECKLIST.md`, which already call this out as a
    manual release step). Low priority unless it starts causing actual
    release mistakes.
+
 ## Resolved
+
+- **Blank lines accumulated between list items after reopening a note from
+  the Library** — fixed 2026-07-15. The Markdown restore converter no longer
+  turns list-item separators into `<br>` elements inside `<ul>`/`<ol>`, and
+  it collapses separators already persisted by the old round-trip behavior.
+  Bullet and numbered list round trips are covered by regression tests; see
+  [rich-text-editor.md](../specs/rich-text-editor.md).
 
 - **Native side-panel modules and encapsulated state** — fixed 2026-07-11.
   `sidepanel.js` is now a native-module entry point over cohesive state,

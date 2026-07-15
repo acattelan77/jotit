@@ -284,17 +284,20 @@ describe("markdownToHtml — pure regex, no DOM needed", () => {
   it("converts unordered lists", () => {
     const md = "- item 1\n- item 2";
     const html = NoteUtils.markdownToHtml(md);
-    assert.match(html, /<ul>/);
-    assert.match(html, /<li>item 1/);
-    assert.match(html, /<li>item 2/);
+    assert.equal(html, "<ul><li>item 1</li><li>item 2</li></ul>");
   });
 
   it("converts ordered lists", () => {
     const md = "1. first\n2. second";
     const html = NoteUtils.markdownToHtml(md);
-    assert.match(html, /<ol>/);
-    assert.match(html, /<li>first/);
-    assert.match(html, /<li>second/);
+    assert.equal(html, "<ol><li>first</li><li>second</li></ol>");
+  });
+
+  it("repairs blank separators introduced by the old list round-trip bug", () => {
+    assert.equal(
+      NoteUtils.markdownToHtml("- item 1\n\n- item 2\n\n- item 3"),
+      "<ul><li>item 1</li><li>item 2</li><li>item 3</li></ul>"
+    );
   });
 
   it("converts inline code", () => {
@@ -604,11 +607,21 @@ describe("round-trip: markdownToHtml → htmlToMarkdown", () => {
       "# Meeting Notes\n\n**Key point:** *discussed* `config` and ==highlight==.\n\n- item 1\n- item 2";
     const html = NoteUtils.markdownToHtml(original);
     const result = NoteUtils.htmlToMarkdown(html);
-    // htmlToMarkdown insert an extra newline between list items
-    assert.equal(
-      result,
-      "# Meeting Notes\n\n**Key point:** *discussed* `config` and ==highlight==.\n\n- item 1\n\n- item 2"
-    );
+    assert.equal(result, original);
+  });
+
+  it("preserves unordered lists without accumulating blank lines", () => {
+    const original = "- item 1\n- item 2\n- item 3";
+    const html = NoteUtils.markdownToHtml(original);
+    assert.doesNotMatch(html, /<br>/);
+    assert.equal(NoteUtils.htmlToMarkdown(html), original);
+  });
+
+  it("preserves ordered lists without accumulating blank lines", () => {
+    const original = "1. first\n2. second\n3. third";
+    const html = NoteUtils.markdownToHtml(original);
+    assert.doesNotMatch(html, /<br>/);
+    assert.equal(NoteUtils.htmlToMarkdown(html), original);
   });
 });
 

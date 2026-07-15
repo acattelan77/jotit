@@ -118,6 +118,13 @@ practice than it was before). Any new regex pass added to `markdownToHtml`
 must run *after* the code-stash step, or it reopens this class of bug — see
 the `stashCode`/`codeStash` mechanism at the top of the function.
 
+List-item newlines are structural separators, not editor line breaks.
+`markdownToHtml` removes those separators while wrapping consecutive items in
+one `<ul>` or `<ol>`, before the remaining Markdown newlines become `<br>`.
+This also collapses blank separators left in saved notes by the pre-2026-07-15
+converter, so affected notes repair themselves when reopened instead of
+accumulating more space on each round trip.
+
 ## Word/character stats
 
 `countWords()` uses `Intl.Segmenter` when available for locale-aware word
