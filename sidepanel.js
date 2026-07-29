@@ -585,8 +585,53 @@ const insertPastedTextAsPlainText = (text) => {
   state.editor.lastRange = caretRange.cloneRange();
 };
 
+const forceSemanticEditorFormatting = () => {
+  try {
+    document.execCommand("styleWithCSS", false, false);
+  } catch (error) {
+    // Some browser contexts do not expose this command; semantic cleanup
+    // still runs after edits.
+  }
+};
+
+const stripInlineEditorStyles = (root = notesInput) => {
+  if (!root?.querySelectorAll) return false;
+  let changed = false;
+  if (root.nodeType === Node.ELEMENT_NODE && root.hasAttribute?.("style")) {
+    root.removeAttribute("style");
+    changed = true;
+  }
+  root.querySelectorAll("[style]").forEach((element) => {
+    element.removeAttribute("style");
+    changed = true;
+  });
+  return changed;
+};
+
+const installInlineStyleSanitizer = () => {
+  if (typeof MutationObserver === "undefined" || !notesInput) return;
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === "attributes") {
+        stripInlineEditorStyles(mutation.target);
+        return;
+      }
+      mutation.addedNodes.forEach((node) => {
+        stripInlineEditorStyles(node);
+      });
+    });
+  });
+  observer.observe(notesInput, {
+    attributes: true,
+    attributeFilter: ["style"],
+    childList: true,
+    subtree: true,
+  });
+};
+
 const applyFormat = (format) => {
   notesInput.focus();
+  forceSemanticEditorFormatting();
   const selection = ensureSelectionInNotes();
 
   switch (format) {
@@ -745,6 +790,7 @@ const applyFormat = (format) => {
     }
   }
 
+  stripInlineEditorStyles();
   updateEditorStats();
   debouncedSaveDraft();
   updateToolbarState();
@@ -1023,6 +1069,7 @@ const setFormData = ({
   state.page.history = normalizePageHistory(savedPageHistory);
   state.library.currentEntryId = libraryEntryId || null;
   notesInput.innerHTML = markdownToHtml(notes || "");
+  stripInlineEditorStyles();
   removeLegacySourceLines();
   updateEditorStats();
 };
@@ -1100,6 +1147,7 @@ const datePickerController = createDatePicker({
 
 const resetEditorFormatting = () => {
   notesInput.focus();
+  forceSemanticEditorFormatting();
   document.execCommand("removeFormat", false, null);
   try {
     if (document.queryCommandState("bold")) {
@@ -1111,6 +1159,7 @@ const resetEditorFormatting = () => {
   } catch (error) {
     // Ignore if the browser doesn't support queryCommandState here.
   }
+  stripInlineEditorStyles();
   notesInput.blur();
 };
 
@@ -2264,6 +2313,8 @@ const runPanelCommand = async (command) => {
 
 const init = async () => {
   // Time controls are rendered dynamically in the date picker.
+  forceSemanticEditorFormatting();
+  installInlineStyleSanitizer();
   let draft = null;
   try {
     const result = await storageGetMultiple([
@@ -2355,6 +2406,7 @@ notesInput.addEventListener("keyup", storeNotesSelection);
 notesInput.addEventListener("mouseup", storeNotesSelection);
 notesInput.addEventListener("focus", storeNotesSelection);
 notesInput.addEventListener("input", () => {
+  stripInlineEditorStyles();
   storeNotesSelection();
   updateEditorStats();
   debouncedSaveDraft();
@@ -2382,7 +2434,12 @@ notesInput.addEventListener("paste", (event) => {
   const pastingIntoExistingCodeBlock =
     anchorNode && findClosestTag(anchorNode, ["pre"]);
   if (pastingIntoExistingCodeBlock) {
+    forceSemanticEditorFormatting();
     document.execCommand("insertText", false, text);
+    stripInlineEditorStyles();
+    storeNotesSelection();
+    updateEditorStats();
+    debouncedSaveDraft();
   } else {
     insertPastedTextAsPlainText(text);
     storeNotesSelection();
@@ -2396,7 +2453,12 @@ notesInput.addEventListener("drop", (event) => {
   const text = event.dataTransfer?.getData("text/plain") || "";
   if (text) {
     notesInput.focus();
+    forceSemanticEditorFormatting();
     document.execCommand("insertText", false, text);
+    stripInlineEditorStyles();
+    storeNotesSelection();
+    updateEditorStats();
+    debouncedSaveDraft();
   }
 });
 

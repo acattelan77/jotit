@@ -74,6 +74,13 @@ delete it (keeps the history legible instead of silently vanishing).
 
 ## Resolved
 
+- **Inline-style CSP warnings from rich-text editing** — fixed 2026-07-29.
+  The editor now forces browser editing commands into semantic markup mode
+  (`styleWithCSS = false`) and strips any transient `style` attributes from
+  restored or edited editor content. The manifest CSP remains strict
+  (`style-src 'self'`, no `unsafe-inline`); see
+  [rich-text-editor.md](../specs/rich-text-editor.md).
+
 - **Blank lines accumulated between list items after reopening a note from
   the Library** — fixed 2026-07-15. The Markdown restore converter no longer
   turns list-item separators into `<br>` elements inside `<ul>`/`<ol>`, and

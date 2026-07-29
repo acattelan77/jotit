@@ -89,4 +89,18 @@ describe("extension package integrity", () => {
       /const exportAllNotes = async \(\) => \{[\s\S]*?\n\s+await saveDraft\(\);\n\n\s+let entries;/
     );
   });
+
+  it("keeps rich-text editing compatible with the extension CSP", () => {
+    const source = read("sidepanel.js");
+    assert.doesNotMatch(
+      manifest.content_security_policy.extension_pages,
+      /'unsafe-inline'/
+    );
+    assert.match(
+      source,
+      /document\.execCommand\("styleWithCSS", false, false\)/
+    );
+    assert.match(source, /querySelectorAll\("\[style\]"\)/);
+    assert.match(source, /removeAttribute\("style"\)/);
+  });
 });

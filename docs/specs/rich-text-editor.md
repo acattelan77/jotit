@@ -95,6 +95,14 @@ real browser:
   `htmlToMarkdown` (`lib/note-utils.js`) so it never reaches saved notes —
   if you add another place that reads code-block text content directly
   (bypassing `htmlToMarkdown`), it needs the same stripping.
+- **Inline style attributes are not valid editor content.** The extension CSP
+  keeps `style-src 'self'` and deliberately does not allow `unsafe-inline`.
+  Before using browser editing commands, the panel forces `styleWithCSS` off
+  so Chrome emits semantic elements (`<b>`, `<i>`, lists, etc.) instead of
+  `<span style=...>` wrappers. The editor also strips any transient `style`
+  attributes after restore, paste/drop, formatting commands, and observed DOM
+  mutations. Do not fix CSP warnings by allowing inline styles in
+  `manifest.json`; preserve semantic markup and strip the browser artifact.
 
 ### Highlight
 
