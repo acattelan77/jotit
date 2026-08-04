@@ -74,6 +74,13 @@ delete it (keeps the history legible instead of silently vanishing).
 
 ## Resolved
 
+- **Context-menu "Send selection to Jot it!"** — shipped 2026-08-03.
+  Right-clicking selected page text offers a menu item that forwards the
+  selection (as `CONTEXT_MENU_SELECTION` via the service worker) straight
+  into the note editor as a code block with source link, opening the panel
+  first if needed. Added the `contextMenus` permission. See
+  [architecture.md](../architecture.md#sending-a-selection-via-the-browser-context-menu).
+
 - **Inline-style CSP warnings from rich-text editing** — fixed 2026-07-29.
   The editor now forces browser editing commands into semantic markup mode
   (`styleWithCSS = false`) and strips any transient `style` attributes from

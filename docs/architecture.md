@@ -32,6 +32,7 @@ types (all handled centrally in background.js):
 | `PANEL_OPEN {tabId}` / `PANEL_OPEN_ACTIVE` / `PANEL_CLOSE {tabId}` | panel → background | Track which tabs have a visible panel (`openPanelTabs` Set). `PANEL_OPEN*` also flushes a command queued while the panel was opening. |
 | `PAGE_SELECTION_CANDIDATE {text, url, title}` | content script → background → panel | Background only re-broadcasts if the panel is actually visible for that tab (checks `openPanelTabs`/detached-window map); otherwise silently drops it. |
 | `RUN_PANEL_COMMAND {command}` | background → open panel | Forward a named `chrome.commands` shortcut to the open panel document. The panel accepts it only from the extension origin. |
+| `CONTEXT_MENU_SELECTION {text, url, title, tabId}` | background → open panel | Forward a "Send selection to Jot it!" context-menu click. If no panel is listening, background queues the payload, opens the panel, and flushes the queue when the panel registers with `PANEL_OPEN*`. Accepted by the panel only from the extension-origin service worker. |
 | `DEBUG_LOG` / `GET_DEBUG_LOGS` / `CLEAR_DEBUG_LOGS` | any → background | Debug utility channel, gated by `debugLogsEnabled` storage flag. |
 | `PING_SELECTION` | background → content script | Liveness probe used to decide whether to inject the content script on-demand. |
 
@@ -39,8 +40,9 @@ types (all handled centrally in background.js):
 `PANEL_OPEN`, `PANEL_OPEN_ACTIVE`, `PANEL_CLOSE`, and the `DEBUG_LOG*` family are only accepted
 by background from senders whose `sender.id === chrome.runtime.id` and whose
 URL is the extension's own origin — i.e., only the side panel document, not
-arbitrary web pages. `RUN_PANEL_COMMAND` is likewise accepted by the panel
-only from the extension-origin service worker. `PAGE_SELECTION_CANDIDATE` is
+arbitrary web pages. `RUN_PANEL_COMMAND` and `CONTEXT_MENU_SELECTION` are
+likewise accepted by the panel only from the extension-origin service worker.
+`PAGE_SELECTION_CANDIDATE` is
 deliberately unrestricted since it legitimately originates from content
 scripts on arbitrary sites.
 
@@ -86,6 +88,44 @@ is inserted automatically: the panel shows a preview bar with **Add
 selection** / dismiss. Clicking **Add selection** inserts the text as a code
 block with the clickable source link as its own paragraph directly below the
 block, at the last known caret position.
+
+### Sending a selection via the browser context menu
+Right-clicking selected page text offers **Send selection to Jot it!**
+(`chrome.contextMenus`, registered on install/update with
+`contexts: ["selection"]`). The click lands in background's
+`contextMenus.onClicked`, which trims/truncates the text (4000 chars, same
+cap as the content-script path) and probes for a live panel document with a
+`CONTEXT_MENU_SELECTION` message. Probing is deliberate: the in-memory
+`openPanelTabs`/`detachedWindows` bookkeeping is lost on every
+service-worker restart (see [Known fragility](#known-fragility)), so it
+cannot decide whether a panel is actually listening — a message round-trip
+can.
+
+Unlike the passive capture above, the menu click is itself the user's
+confirmation, so the panel inserts immediately — same
+code-block-plus-source-link shape via the shared
+`insertPageSelectionIntoNote()` helper, which also records the page visit,
+clears any pending-selection preview for the same text, and saves the
+draft. The panel dedupes identical text+URL re-deliveries within 5s
+(`CONTEXT_MENU_DEDUPE_MS`), so a double click on the menu item or a queued
+payload flushed right after a direct delivery can't insert twice.
+
+If no panel is listening, background queues the payload (with a `queuedAt`
+timestamp) both in memory and in
+`chrome.storage.session["pendingContextMenuSelections"]` — the latter
+survives a service-worker restart and is consumed by the panel itself on
+load (`consumeQueuedContextMenuSelections()`). Background also makes a
+**best-effort** `chrome.sidePanel.open()` attempt with **no detached-window
+fallback**: some Chromium variants reject `sidePanel.open()` from a
+context-menu event regardless of user activation, and the detached fallback
+then opens a second, unwanted Jot it! window next to the user's existing
+panel. If the open fails, the payload is simply delivered the next time the
+panel announces (`PANEL_OPEN*` flush) or loads; queued payloads older than
+15 minutes are dropped rather than inserted into an unrelated later note.
+The payload carries a `detachedForTab` flag so that when a detached window
+owns the tab, only that window inserts — a docked panel receiving the same
+broadcast skips it. In standalone mode the panel drops payloads whose
+`tabId` doesn't match its `sourceTabId`.
 
 ### Save / Save As (export)
 Entirely local to the panel document — no messaging involved. Both handlers:
@@ -167,6 +207,7 @@ panel reload.
 | `titleLockEnabled` | boolean | panel | panel |
 | `debugLogsEnabled` | boolean | any context (debug console) | all three contexts, via `chrome.storage.onChanged` |
 | `onboardingHintDismissed` | boolean | panel | panel |
+| `pendingContextMenuSelections` (**storage.session**, not local) | array of `CONTEXT_MENU_SELECTION` payloads | background | background flush, panel on load |
 
 ### Note library (IndexedDB)
 
@@ -307,12 +348,14 @@ module that owns it; coordination across features stays in `sidepanel.js`.
 
 ## Permissions (manifest.json)
 
-`sidePanel`, `storage`, `downloads`, `tabs`, `scripting`, plus
+`sidePanel`, `storage`, `downloads`, `tabs`, `scripting`, `contextMenus`, plus
 `host_permissions: ["http://*/*", "https://*/*"]`. Each maps to a specific
 runtime need — see the permission table in
 [ADR-0001](decisions/0001-static-unbundled-extension.md) if you're
 considering adding or removing one; permission changes need a Chrome Web
-Store review justification, don't add one speculatively.
+Store review justification, don't add one speculatively. `contextMenus`
+backs the "Send selection to Jot it!" right-click item (see
+[Sending a selection via the browser context menu](#sending-a-selection-via-the-browser-context-menu)).
 
 ## Design system reference
 

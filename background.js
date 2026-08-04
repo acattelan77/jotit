@@ -10,8 +10,23 @@ const configurePanelBehavior = async () => {
   }
 };
 
+const CONTEXT_MENU_SEND_SELECTION = "send-selection-to-jot-it";
+
+const createContextMenus = () => {
+  if (!chrome.contextMenus?.create) return;
+  chrome.contextMenus.removeAll(() => {
+    void chrome.runtime.lastError;
+    chrome.contextMenus.create({
+      id: CONTEXT_MENU_SEND_SELECTION,
+      title: "Send selection to Jot it!",
+      contexts: ["selection"],
+    });
+  });
+};
+
 chrome.runtime.onInstalled.addListener(() => {
   void configurePanelBehavior();
+  createContextMenus();
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -67,6 +82,7 @@ const RESTRICTED_MESSAGE_TYPES = new Set([
   "PANEL_CLOSE",
 ]);
 let pendingPanelCommands = [];
+let pendingContextMenuSelections = [];
 let debugEnabled = false;
 let debugLogs = [];
 
@@ -391,6 +407,145 @@ const flushPendingPanelCommands = () => {
   commands.forEach((command) => sendPanelCommand(command));
 };
 
+const MAX_CONTEXT_MENU_SELECTION_LENGTH = 4000;
+const PENDING_CONTEXT_MENU_SELECTIONS_KEY = "pendingContextMenuSelections";
+
+const forwardContextMenuSelection = (payload) => {
+  chrome.runtime.sendMessage(
+    { type: "CONTEXT_MENU_SELECTION", ...payload },
+    () => {
+      if (chrome.runtime.lastError) {
+        debugLog("background", "CONTEXT_MENU_SELECTION forward failed", {
+          error: chrome.runtime.lastError?.message || "",
+        });
+      }
+    }
+  );
+};
+
+const persistPendingContextMenuSelections = () => {
+  if (!chrome.storage?.session) return;
+  chrome.storage.session.set(
+    { [PENDING_CONTEXT_MENU_SELECTIONS_KEY]: pendingContextMenuSelections },
+    () => {
+      if (chrome.runtime.lastError) {
+        debugLog("background", "CONTEXT_MENU_SELECTION persist failed", {
+          error: chrome.runtime.lastError.message || "",
+        });
+      }
+    }
+  );
+};
+
+// Best-effort docked-panel open for the context-menu flow. Deliberately NO
+// detached-window fallback (unlike the action-click path): some Chromium
+// variants reject sidePanel.open() from a context-menu event regardless of
+// user activation, and the detached fallback then opens a second, unwanted
+// Jot it! window next to the user's existing panel. If the open fails, the
+// payload simply stays queued until the panel next announces or loads.
+const tryOpenSidePanelForContextMenu = async (tab) => {
+  const windowId = Number.isInteger(tab?.windowId) ? tab.windowId : null;
+  const tabId = Number.isInteger(tab?.id) ? tab.id : null;
+  if (windowId) {
+    try {
+      await chrome.sidePanel.open({ windowId });
+      return;
+    } catch (error) {
+      debugLog("background", "CONTEXT_MENU_SELECTION sidePanel.open rejected", {
+        windowId,
+        error: String(error),
+      });
+    }
+  }
+  if (!tabId) return;
+  try {
+    await ensurePanelOptions(tabId, "context_menu_tab_fallback");
+    await chrome.sidePanel.open({ tabId });
+  } catch (retryError) {
+    debugLog("background", "CONTEXT_MENU_SELECTION sidePanel.open rejected", {
+      tabId,
+      error: String(retryError),
+    });
+  }
+};
+
+const queueContextMenuSelection = (payload, tab) => {
+  pendingContextMenuSelections.push(payload);
+  // Persisted so a service-worker restart between queueing and delivery
+  // doesn't lose the selection (same eviction fragility as openPanelTabs);
+  // the panel also consumes this key directly on load.
+  persistPendingContextMenuSelections();
+  void tryOpenSidePanelForContextMenu(tab);
+};
+
+const deliverContextMenuSelection = (payload, tab) => {
+  chrome.runtime.sendMessage(
+    { type: "CONTEXT_MENU_SELECTION", ...payload },
+    () => {
+      if (!chrome.runtime.lastError) return;
+      debugLog("background", "CONTEXT_MENU_SELECTION panel unavailable", {
+        error: chrome.runtime.lastError.message || "",
+      });
+      queueContextMenuSelection(payload, tab);
+    }
+  );
+};
+
+const flushPendingContextMenuSelections = () => {
+  const fromMemory = pendingContextMenuSelections;
+  pendingContextMenuSelections = [];
+  const forwardAll = (stored) => {
+    const selections = [...fromMemory, ...stored];
+    if (stored.length) {
+      chrome.storage.session.remove(PENDING_CONTEXT_MENU_SELECTIONS_KEY);
+    }
+    selections.forEach((payload) => forwardContextMenuSelection(payload));
+  };
+  if (!chrome.storage?.session) {
+    forwardAll([]);
+    return;
+  }
+  // Merge in payloads persisted by a previous service-worker incarnation.
+  chrome.storage.session.get(PENDING_CONTEXT_MENU_SELECTIONS_KEY, (result) => {
+    if (chrome.runtime.lastError) {
+      forwardAll([]);
+      return;
+    }
+    const stored = Array.isArray(result?.[PENDING_CONTEXT_MENU_SELECTIONS_KEY])
+      ? result[PENDING_CONTEXT_MENU_SELECTIONS_KEY]
+      : [];
+    forwardAll(stored);
+  });
+};
+
+chrome.contextMenus?.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== CONTEXT_MENU_SEND_SELECTION) return;
+  const text =
+    typeof info.selectionText === "string" ? info.selectionText.trim() : "";
+  if (!text) return;
+  const tabId = Number.isInteger(tab?.id) ? tab.id : null;
+  const payload = {
+    text: text.slice(0, MAX_CONTEXT_MENU_SELECTION_LENGTH),
+    url: typeof info.pageUrl === "string" ? info.pageUrl : "",
+    title: typeof tab?.title === "string" ? tab.title : "",
+    tabId,
+    queuedAt: Date.now(),
+    // Lets a docked panel skip the insert when a detached window owns this
+    // tab (both would otherwise receive the broadcast and insert twice).
+    detachedForTab: Number.isInteger(tabId) && hasDetachedWindowForTab(tabId),
+  };
+  debugLog("background", "CONTEXT_MENU_SELECTION", {
+    tabId,
+    textLength: payload.text.length,
+    url: payload.url,
+  });
+  // Probe for a live panel document first — this is accurate even when the
+  // in-memory openPanelTabs/detachedWindows bookkeeping was lost to a
+  // service-worker restart. Only if nothing is listening do we queue and
+  // try to open the panel.
+  deliverContextMenuSelection(payload, tab);
+});
+
 chrome.commands?.onCommand.addListener((command) => {
   if (command === "open-jot-it") {
     (async () => {
@@ -463,6 +618,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     void ensureSelectionScript(message.tabId);
     sendResponse({ ok: true });
     flushPendingPanelCommands();
+    flushPendingContextMenuSelections();
     return;
   }
 
@@ -478,6 +634,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       ensureSelectionScript(tab.id);
       sendResponse({ ok: true, tabId: tab.id });
       flushPendingPanelCommands();
+      flushPendingContextMenuSelections();
     })();
     return true;
   }

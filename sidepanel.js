@@ -1959,6 +1959,67 @@ const handleClear = async () => {
   notesInput.focus();
 };
 
+const CONTEXT_MENU_DEDUPE_MS = 5000;
+// Queued context-menu payloads older than this are dropped instead of
+// inserting hours-old text into whatever note happens to be open later.
+const QUEUED_CONTEXT_MENU_SELECTION_TTL_MS = 15 * 60 * 1000;
+const PENDING_CONTEXT_MENU_SELECTIONS_KEY = "pendingContextMenuSelections";
+
+const handleContextMenuSelection = (payload) => {
+  if (typeof payload?.text !== "string" || !payload.text.trim()) return;
+  if (isStandalone && Number.isInteger(sourceTabId)) {
+    if (payload.tabId !== sourceTabId) return;
+  } else if (!isStandalone && payload.detachedForTab) {
+    // A detached window owns this tab and will insert; a docked panel
+    // receiving the same broadcast must not duplicate it.
+    return;
+  }
+  if (
+    Number.isFinite(payload.queuedAt) &&
+    Date.now() - payload.queuedAt > QUEUED_CONTEXT_MENU_SELECTION_TTL_MS
+  ) {
+    debugLog("CONTEXT_MENU_SELECTION expired", { url: payload.url || "" });
+    return;
+  }
+  const text = payload.text.trim();
+  const url = typeof payload.url === "string" ? payload.url : "";
+  const effectiveUrl = url || state.page.currentUrl;
+  const now = Date.now();
+  // Identical re-deliveries (double click on the menu item, or a queued
+  // payload flushed right after a direct delivery) must not insert twice.
+  if (
+    text === state.editor.lastInsertedSelection.text &&
+    effectiveUrl === state.editor.lastInsertedSelection.url &&
+    now - state.editor.lastInsertedAt < CONTEXT_MENU_DEDUPE_MS
+  ) {
+    debugLog("CONTEXT_MENU_SELECTION deduped", { url: effectiveUrl });
+    return;
+  }
+  debugLog("CONTEXT_MENU_SELECTION received", {
+    length: text.length,
+    url,
+    tabId: payload.tabId,
+  });
+  insertPageSelectionIntoNote({
+    text,
+    url,
+    title: typeof payload.title === "string" ? payload.title : "",
+  });
+};
+
+// Background queues selections in storage.session when no panel is
+// listening; consume any that were waiting when this document loaded.
+const consumeQueuedContextMenuSelections = () => {
+  if (!chrome.storage?.session) return;
+  chrome.storage.session.get(PENDING_CONTEXT_MENU_SELECTIONS_KEY, (result) => {
+    if (chrome.runtime.lastError) return;
+    const items = result?.[PENDING_CONTEXT_MENU_SELECTIONS_KEY];
+    if (!Array.isArray(items) || !items.length) return;
+    chrome.storage.session.remove(PENDING_CONTEXT_MENU_SELECTIONS_KEY);
+    items.forEach((item) => handleContextMenuSelection(item));
+  });
+};
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return;
   if (message.type === "RUN_PANEL_COMMAND") {
@@ -1976,6 +2037,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, error: String(error) });
       });
     return true;
+  }
+  if (message.type === "CONTEXT_MENU_SELECTION") {
+    const isTrustedSender =
+      sender?.id === chrome.runtime.id &&
+      sender?.url === chrome.runtime.getURL("background.js");
+    if (!isTrustedSender) return;
+    handleContextMenuSelection(message);
+    return;
   }
   if (message.type !== "PAGE_SELECTION_CANDIDATE") return;
   if (typeof message.text !== "string" || !message.text.trim()) return;
@@ -2010,18 +2079,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   });
 });
 
-const addPendingPageSelection = () => {
-  if (!state.editor.pendingSelection?.text?.trim()) return;
-  const selection = state.editor.pendingSelection;
+const insertPageSelectionIntoNote = (selection) => {
+  if (!selection?.text?.trim()) return;
+  const url = selection.url || state.page.currentUrl;
   if (selection.url || selection.title) {
     recordPageVisit(selection.url, selection.title);
   }
-  insertSelectionWithLink(selection.text, selection.url || state.page.currentUrl);
-  debugLog("selection inserted", { url: selection.url || state.page.currentUrl });
-  state.editor.lastInsertedSelection = { text: selection.text, url: selection.url || "" };
+  insertSelectionWithLink(selection.text, url);
+  debugLog("selection inserted", { url });
+  state.editor.lastInsertedSelection = { text: selection.text, url: url || "" };
   state.editor.lastInsertedAt = Date.now();
   clearPendingPageSelection();
   debouncedSaveDraft();
+};
+
+const addPendingPageSelection = () => {
+  insertPageSelectionIntoNote(state.editor.pendingSelection);
 };
 const handleMeetingNameInput = () => {
   const value = meetingNameInput.value.trim();
@@ -2368,6 +2441,7 @@ const init = async () => {
   updateToolbarState();
   updateEditorStats();
   syncPanelOpenState();
+  consumeQueuedContextMenuSelections();
   // Covers the migration gap for a draft that already had real body
   // content before this feature existed (or one the user never touches
   // again after this reload) — every other case is covered by the
