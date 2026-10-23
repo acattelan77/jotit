@@ -25,6 +25,15 @@ describe("extension package integrity", () => {
     });
   });
 
+  it("keeps the version string in sync across package.json, manifest.json, and sidepanel.html", () => {
+    const packageVersion = JSON.parse(read("package.json")).version;
+    const htmlVersion = /v\.\s*(\d+\.\d+\.\d+)/.exec(read("sidepanel.html"))?.[1];
+    assert.ok(packageVersion, "package.json is missing a version");
+    assert.ok(htmlVersion, "sidepanel.html is missing the version string");
+    assert.equal(manifest.version, packageVersion, "manifest.json vs package.json");
+    assert.equal(htmlVersion, packageVersion, "sidepanel.html vs package.json");
+  });
+
   it("keeps sidepanel DOM lookups synchronized with sidepanel.html", () => {
     const jsIds = Array.from(
       read("sidepanel.js").matchAll(/getElementById\("([^"]+)"\)/g),

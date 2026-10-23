@@ -1050,9 +1050,7 @@ const getFormData = () => ({
   meetingName: meetingNameInput.value,
   meetingDate: meetingDateInput.value,
   notes: htmlToMarkdown(notesInput.innerHTML),
-  notesText: notesInput.textContent || "",
   pageUrl: state.page.currentUrl,
-  pageTitle: state.title.currentPage,
   pageHistory: normalizePageHistory(state.page.history),
 });
 

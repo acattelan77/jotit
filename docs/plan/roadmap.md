@@ -66,11 +66,11 @@ delete it (keeps the history legible instead of silently vanishing).
    externally-authored Markdown re-imported into the app. See
    [ADR-0003](../decisions/0003-hand-rolled-markdown-conversion.md).
 4. **Version string kept in sync by hand in three places** —
-   `package.json`, `manifest.json`, and a hardcoded `v. 1.3.0` string in
-   `sidepanel.html`. No build step enforces consistency (see
-   `GO_LIVE_PLAN.md`/`RELEASE_CHECKLIST.md`, which already call this out as a
-   manual release step). Low priority unless it starts causing actual
-   release mistakes.
+   `package.json`, `manifest.json`, and a hardcoded `v. <version>` string in
+   `sidepanel.html`. Still a manual step (no build step), but a
+   repository-integrity test now fails CI if the three drift, so a mismatch
+   is caught instead of shipping silently. Currently all three are `1.4.0`.
+   See `GO_LIVE_PLAN.md`/`RELEASE_CHECKLIST.md` for the manual bump steps.
 
 ## Resolved
 

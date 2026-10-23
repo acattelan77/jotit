@@ -179,9 +179,7 @@ page-level shortcut handling.
   meetingName: string,       // raw #meetingName input value
   meetingDate: string,       // "YYYY-MM-DDTHH:MM", local time, no timezone
   notes: string,              // Markdown, converted from editor HTML via htmlToMarkdown()
-  notesText: string,          // plain-text fallback (editor textContent)
   pageUrl: string,
-  pageTitle: string,
   pageHistory: Array<{        // visited source pages for this draft, max 100
     url: string,
     title: string,
