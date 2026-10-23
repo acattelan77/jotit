@@ -78,7 +78,7 @@ describe("extension package integrity", () => {
     const source = read("sidepanel.js");
     assert.match(
       source,
-      /const handleSave = async \(\) => \{\n\s+await saveDraft\(\);\n\s+const data = getFormData\(\);/
+      /const handleSave = async \(\) => \{[\s\S]*?\n\s+await saveDraft\(\);\n\s+const data = getFormData\(\);/
     );
     assert.match(
       source,

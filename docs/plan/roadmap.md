@@ -74,6 +74,13 @@ delete it (keeps the history legible instead of silently vanishing).
 
 ## Resolved
 
+- **Save to a remembered folder** — shipped 2026-10-23. A footer control
+  chooses the folder Save writes to (default Downloads), with explicit
+  permission/write-error reporting instead of the silent Downloads fallback
+  that got the 2026-07-10 folder setting removed. See
+  [ADR-0010](../decisions/0010-remembered-save-folder.md) and
+  [export-and-save.md](../specs/export-and-save.md#remembered-save-folder).
+
 - **Context-menu "Send selection to Jot it!"** — shipped 2026-08-03.
   Right-clicking selected page text offers a menu item that forwards the
   selection (as `CONTEXT_MENU_SELECTION` via the service worker) straight

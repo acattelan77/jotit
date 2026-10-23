@@ -33,6 +33,9 @@ export const createPanelState = () => ({
     selectedIds: new Set(),
     saveQueue: Promise.resolve(),
   },
+  saveFolder: {
+    handle: null,
+  },
   draftSaveQueue: Promise.resolve(),
   storage: {
     refreshed: {},

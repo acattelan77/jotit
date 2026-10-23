@@ -133,8 +133,10 @@ read form data, then delegate deterministic Markdown/frontmatter, filename,
 image rewriting, and attachment collection to the export service in
 `panel/export-service.mjs`.
 
-- **Save** (`handleSave`): `chrome.downloads.download` with `saveAs:false`
-  first; falls back to `saveAs:true` on error.
+- **Save** (`handleSave`): if a save folder is remembered
+  ([ADR-0010](decisions/0010-remembered-save-folder.md)), writes into it via
+  File System Access; otherwise `chrome.downloads.download` with
+  `saveAs:false` first, falling back to `saveAs:true` on error.
 - **Save As** (`handleSaveAs`): tries `window.showDirectoryPicker()` (File
   System Access API) first and writes files directly if available;
   otherwise falls back to `chrome.downloads.download` with
@@ -207,6 +209,11 @@ panel reload.
 | `titleLockEnabled` | boolean | panel | panel |
 | `debugLogsEnabled` | boolean | any context (debug console) | all three contexts, via `chrome.storage.onChanged` |
 | `onboardingHintDismissed` | boolean | panel | panel |
+
+The remembered save folder is not in `chrome.storage` (a
+`FileSystemDirectoryHandle` is not JSON-serializable): it lives in the
+IndexedDB database `"jotit-save-folder"`, store `"handles"`, key
+`"saveFolder"` — see [ADR-0010](decisions/0010-remembered-save-folder.md).
 | `pendingContextMenuSelections` (**storage.session**, not local) | array of `CONTEXT_MENU_SELECTION` payloads | background | background flush, panel on load |
 
 ### Note library (IndexedDB)
@@ -339,6 +346,7 @@ See [ADR-0009](decisions/0009-native-sidepanel-modules.md).
 | `panel/date-time.mjs` | Pure strict parsing and local date/time formatting. |
 | `panel/date-picker.mjs` | Date-picker state, rendering, keyboard/pointer commands, and picker-owned listeners. |
 | `panel/export-service.mjs` | Markdown/frontmatter and attachment package construction plus low-level download/File System Access adapters. |
+| `panel/save-folder.mjs` | IndexedDB persistence of the remembered save folder handle and its readwrite permission check. |
 | `lib/note-utils.js` | Pure filename, URL, and Markdown conversion helpers exposed as the classic-script `window.NoteUtils` global. |
 | `note-library.js` | Browser-only IndexedDB wrapper exposed as the classic-script `window.NoteLibrary` global. |
 
