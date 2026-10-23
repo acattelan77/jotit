@@ -44,3 +44,4 @@ one of those don't need an ADR — put that context in the relevant
 | [0007](0007-autosave-to-library.md) | Note library entries are created automatically on autosave, not only on explicit Save/Save As | Accepted |
 | [0008](0008-chrome-extension-commands.md) | Chrome extension commands for configurable shortcuts | Accepted |
 | [0009](0009-native-sidepanel-modules.md) | Native modules for cohesive side-panel responsibilities | Accepted |
+| [0010](0010-remembered-save-folder.md) | Save writes to a remembered folder chosen with File System Access | Accepted |

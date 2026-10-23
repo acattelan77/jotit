@@ -1,6 +1,11 @@
 import { createDatePicker } from "./panel/date-picker.mjs";
 import { pad2, toLocalDateTimeValue } from "./panel/date-time.mjs";
 import { createExportService } from "./panel/export-service.mjs";
+import {
+  createSaveFolderStore,
+  ensureFolderAccess,
+  SaveFolderAccessError,
+} from "./panel/save-folder.mjs";
 import { createPanelState, resetTitleTrackingForNewNote } from "./panel/state.mjs";
 import { createStorage, debounce } from "./panel/storage.mjs";
 
@@ -33,6 +38,9 @@ const saveAsBtn = document.getElementById("saveAsBtn");
 const toolbar = document.querySelector(".toolbar");
 const editorStack = document.querySelector(".editor-stack");
 const statusMessage = document.getElementById("statusMessage");
+const saveFolderBtn = document.getElementById("saveFolderBtn");
+const saveFolderLabel = document.getElementById("saveFolderLabel");
+const saveFolderResetBtn = document.getElementById("saveFolderResetBtn");
 const wordCount = document.getElementById("wordCount");
 const characterCount = document.getElementById("characterCount");
 const selectionCapture = document.getElementById("selectionCapture");
@@ -282,6 +290,7 @@ const {
   downloadMarkdown,
   prepareNoteExport,
   writeAttachmentsToDirectory,
+  writeNoteToDirectory,
   writeTextFile,
 } = createExportService({
   noteUtils: NoteUtils,
@@ -1561,6 +1570,93 @@ const setLibraryViewOpen = (open) => {
   }
 };
 
+// Remembered save folder (ADR-0010). When set, Save and the library row
+// export write into it instead of Downloads; Save As and Export all open
+// their directory picker there. Access problems are always reported, never
+// silently redirected to Downloads.
+const saveFolderStore = createSaveFolderStore();
+
+const renderSaveFolder = () => {
+  const { handle } = state.saveFolder;
+  if (saveFolderLabel) saveFolderLabel.textContent = handle ? handle.name : "Downloads";
+  if (saveFolderBtn) {
+    saveFolderBtn.title = handle
+      ? `Save writes to "${handle.name}". Click to choose another folder.`
+      : "Save writes to Downloads. Click to choose a folder.";
+  }
+  if (saveFolderResetBtn) saveFolderResetBtn.hidden = !handle;
+};
+
+const loadSaveFolder = async () => {
+  try {
+    state.saveFolder.handle = await saveFolderStore.get();
+  } catch (error) {
+    reportError("Couldn't load the save folder.", error);
+  }
+  renderSaveFolder();
+};
+
+const getPickerStartIn = () =>
+  state.saveFolder.handle ? { startIn: state.saveFolder.handle } : {};
+
+const chooseSaveFolder = async () => {
+  if (typeof window.showDirectoryPicker !== "function") {
+    reportError("Choosing a save folder isn't supported in this browser.");
+    return;
+  }
+  let handle;
+  try {
+    handle = await window.showDirectoryPicker({
+      mode: "readwrite",
+      ...getPickerStartIn(),
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    reportError("Couldn't open folder picker.", error);
+    return;
+  }
+  try {
+    await saveFolderStore.set(handle);
+  } catch (error) {
+    reportError("Couldn't remember that folder.", error);
+    return;
+  }
+  state.saveFolder.handle = handle;
+  renderSaveFolder();
+  showToast(`Save now writes to "${handle.name}"`, { timeoutMs: 2400 });
+};
+
+const resetSaveFolder = async () => {
+  try {
+    await saveFolderStore.clear();
+  } catch (error) {
+    reportError("Couldn't reset the save folder.", error);
+    return;
+  }
+  state.saveFolder.handle = null;
+  renderSaveFolder();
+  showToast("Save now writes to Downloads", { timeoutMs: 2400 });
+};
+
+// Resolves to the remembered folder with write access, or null when Save
+// should use Downloads. Must run before any slow await so the click's user
+// gesture is still valid for Chrome's permission prompt.
+const getWritableSaveFolder = async () => {
+  const { handle } = state.saveFolder;
+  return handle ? ensureFolderAccess(handle) : null;
+};
+
+const reportSaveFolderError = (error) => {
+  if (error instanceof SaveFolderAccessError) {
+    reportError(error.message, error);
+    return;
+  }
+  const name = state.saveFolder.handle?.name || "the save folder";
+  const message = `Couldn't write to "${name}". It may have been moved or deleted — choose it again from the footer.`;
+  reportError(message, error);
+  window.alert(message);
+};
+
 // Exports a single library entry straight to disk without opening it into
 // the editor first — mirrors handleSave's exact single-note behavior
 // (folder only if the note has image attachments, silent saveAs:false
@@ -1569,6 +1665,13 @@ const setLibraryViewOpen = (open) => {
 // shared through prepareNoteExport(); only this path's disk-write fallback
 // remains specific to the row action.
 const exportLibraryEntry = async (entry) => {
+  let saveFolder;
+  try {
+    saveFolder = await getWritableSaveFolder();
+  } catch (error) {
+    reportSaveFolderError(error);
+    return;
+  }
   const data = {
     meetingName: entry.title,
     meetingDate: entry.meetingDate,
@@ -1584,6 +1687,21 @@ const exportLibraryEntry = async (entry) => {
       noteDownloadFilename,
     } = await prepareNoteExport(data);
     const mimeType = "text/markdown";
+
+    if (saveFolder) {
+      try {
+        await writeNoteToDirectory(saveFolder, {
+          downloadFilename,
+          exportData,
+          exportRoot,
+        });
+      } catch (error) {
+        reportSaveFolderError(error);
+        return;
+      }
+      showToast(`Exported to "${saveFolder.name}"`, { timeoutMs: 1800 });
+      return;
+    }
 
     try {
       await downloadMarkdown(exportData.markdown, noteDownloadFilename, {
@@ -1741,7 +1859,10 @@ const exportAllNotes = async () => {
   let directoryHandle = null;
   if (typeof window.showDirectoryPicker === "function") {
     try {
-      directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+      directoryHandle = await window.showDirectoryPicker({
+        mode: "readwrite",
+        ...getPickerStartIn(),
+      });
     } catch (error) {
       if (error?.name === "AbortError") return;
       reportError("Couldn't open folder picker.", error);
@@ -1813,6 +1934,13 @@ const exportAllNotes = async () => {
 };
 
 const handleSave = async () => {
+  let saveFolder;
+  try {
+    saveFolder = await getWritableSaveFolder();
+  } catch (error) {
+    reportSaveFolderError(error);
+    return;
+  }
   await saveDraft();
   const data = getFormData();
   let prepared;
@@ -1826,6 +1954,18 @@ const handleSave = async () => {
   const { exportData, hasAttachments, exportRoot, noteDownloadFilename } =
     prepared;
   const mimeType = "text/markdown";
+
+  if (saveFolder) {
+    try {
+      await writeNoteToDirectory(saveFolder, prepared);
+    } catch (error) {
+      reportSaveFolderError(error);
+      return;
+    }
+    showToast(`Exported to "${saveFolder.name}"`, { timeoutMs: 1800 });
+    notesInput.focus();
+    return;
+  }
 
   try {
     await downloadMarkdown(exportData.markdown, noteDownloadFilename, {
@@ -1864,7 +2004,10 @@ const handleSaveAs = async ({ preferDirectoryPicker = true } = {}) => {
   let directoryHandle = null;
   if (preferDirectoryPicker && typeof window.showDirectoryPicker === "function") {
     try {
-      directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+      directoryHandle = await window.showDirectoryPicker({
+        mode: "readwrite",
+        ...getPickerStartIn(),
+      });
     } catch (error) {
       if (error?.name === "AbortError") return;
       reportError("Couldn't open folder picker.", error);
@@ -2385,6 +2528,7 @@ const runPanelCommand = async (command) => {
 };
 
 const init = async () => {
+  loadSaveFolder();
   // Time controls are rendered dynamically in the date picker.
   forceSemanticEditorFormatting();
   installInlineStyleSanitizer();
@@ -2551,6 +2695,8 @@ window.addEventListener("beforeunload", () => {
 
 saveButton.addEventListener("click", handleSave);
 saveAsBtn?.addEventListener("click", handleSaveAs);
+saveFolderBtn?.addEventListener("click", chooseSaveFolder);
+saveFolderResetBtn?.addEventListener("click", resetSaveFolder);
 clearButton.addEventListener("click", handleClear);
 libraryToggleBtn?.addEventListener("click", () => {
   setLibraryViewOpen(!state.library.viewOpen);

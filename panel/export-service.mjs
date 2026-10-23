@@ -283,6 +283,53 @@ export const createExportService = ({
     }
   };
 
+  const fileExists = async (directoryHandle, filename) => {
+    try {
+      await directoryHandle.getFileHandle(filename);
+      return true;
+    } catch (error) {
+      if (error?.name === "NotFoundError") return false;
+      throw error;
+    }
+  };
+
+  // Mirrors chrome.downloads' "uniquify": "note.md" -> "note (1).md".
+  const toAvailableFilename = async (directoryHandle, filename) => {
+    if (!(await fileExists(directoryHandle, filename))) return filename;
+    const match = /^(.*?)(\.[^.]*)?$/.exec(filename);
+    const base = match[1];
+    const extension = match[2] || "";
+    for (let index = 1; index < 1000; index += 1) {
+      const candidate = `${base} (${index})${extension}`;
+      if (!(await fileExists(directoryHandle, candidate))) return candidate;
+    }
+    throw new Error("Couldn't find a free filename.");
+  };
+
+  // Writes a prepared note package with the same layout Save uses in
+  // Downloads: a bare .md, or <exportRoot>/<file>.md + attachments/ when
+  // the note has images. The .md is uniquified, attachments overwrite.
+  const writeNoteToDirectory = async (
+    directoryHandle,
+    { downloadFilename, exportData, exportRoot }
+  ) => {
+    const targetDirectory = exportRoot
+      ? await directoryHandle.getDirectoryHandle(exportRoot, { create: true })
+      : directoryHandle;
+    const filename = await toAvailableFilename(
+      targetDirectory,
+      downloadFilename
+    );
+    await writeTextFile(
+      targetDirectory,
+      filename,
+      exportData.markdown,
+      "text/markdown"
+    );
+    await writeAttachmentsToDirectory(targetDirectory, exportData.attachments);
+    return exportRoot ? `${exportRoot}/${filename}` : filename;
+  };
+
   return {
     buildMarkdown,
     buildObsidianImageExport,
@@ -291,6 +338,7 @@ export const createExportService = ({
     downloadMarkdown,
     prepareNoteExport,
     writeAttachmentsToDirectory,
+    writeNoteToDirectory,
     writeTextFile,
   };
 };

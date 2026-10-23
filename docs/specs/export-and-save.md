@@ -38,9 +38,11 @@ Both paths use `exportService.prepareNoteExport()`
 (`panel/export-service.mjs`) to build form data, filename, Markdown,
 frontmatter, and rewritten image attachments once.
 
-- **Save** (`handleSave`): `chrome.downloads.download({saveAs:false})`
-  first (no dialog); on error, retries with `saveAs:true`. It calls
-  `saveDraft()` before reading form data for export.
+- **Save** (`handleSave`): when a save folder is remembered (see below),
+  writes into it with `exportService.writeNoteToDirectory()`; otherwise
+  `chrome.downloads.download({saveAs:false})` first (no dialog); on error,
+  retries with `saveAs:true`. It calls `saveDraft()` before reading form
+  data for export.
 - **Save As** (`handleSaveAs`): tries `window.showDirectoryPicker()` (File
   System Access API) first, writing files directly via
   `FileSystemDirectoryHandle` if the user's Chrome supports it; otherwise
@@ -56,6 +58,30 @@ The write mechanisms remain intentionally distinct: Save uses Downloads with
 a Save As fallback, while Save As prefers the File System Access API. Changes
 to export construction belong in `panel/export-service.mjs`; changes to
 handler orchestration still need both paths verified.
+
+## Remembered save folder
+
+See [ADR-0010](../decisions/0010-remembered-save-folder.md).
+
+- The footer shows "Save to: <folder name>" (default "Downloads"). Clicking
+  it opens `showDirectoryPicker({ mode: "readwrite" })`; the handle is
+  stored in IndexedDB (`panel/save-folder.mjs`). The × button next to it
+  clears the folder and Save returns to Downloads.
+- When set, **Save** and the library row **Save .md** action write into the
+  folder with the same layout as Downloads: a bare `.md` for notes without
+  images, `<slug>/<file>.md` + `attachments/` otherwise. An existing `.md`
+  is not overwritten — the new file gets a ` (1)`, ` (2)`… suffix, like
+  `chrome.downloads`' `uniquify`.
+- **Save As** and **Export all** keep their own picker but open it in the
+  remembered folder (`startIn`).
+- Access is checked before `saveDraft()` so Chrome's permission prompt still
+  has the click's user gesture. Every failure is reported and nothing is
+  written to Downloads instead:
+  - prompt denied → error toast "Access to "<name>" was not allowed.";
+  - no user gesture (Chrome command shortcut) → error toast
+    "Click Save to allow access to "<name>".";
+  - write error (folder moved or deleted) → error toast + alert asking to
+    choose the folder again.
 
 **Export all** also flushes the current editor draft before listing library
 entries, otherwise the current note can be missing the user's last edit in the

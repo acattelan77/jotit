@@ -79,6 +79,7 @@ concern. The split is responsibility-based and deliberately shallow; see
 | `panel/date-time.mjs` | Strict parsing and local date/time conversion with no DOM or Chrome dependency. |
 | `panel/date-picker.mjs` | Picker-owned state, 42-cell month rendering, displayed value, open/close behavior, keyboard navigation, and time adjustment. It receives DOM elements and callbacks from the entry point. |
 | `panel/export-service.mjs` | Deterministic frontmatter/Markdown construction, embedded-image rewriting, capped remote-image fetches, attachment packaging, downloads, and File System Access writes. It receives `NoteUtils`, `chrome.downloads`, and `fetch` explicitly. |
+| `panel/save-folder.mjs` | Remembered save folder: stores the `FileSystemDirectoryHandle` in its own IndexedDB database and checks/requests readwrite access, raising `SaveFolderAccessError` instead of falling back to Downloads. See [ADR-0010](decisions/0010-remembered-save-folder.md). |
 | `lib/note-utils.js` | General pure helpers shared with Node tests: filename, URL, image metadata, and Markdown↔HTML conversion. |
 | `note-library.js` | Browser-only IndexedDB access behind `window.NoteLibrary`; storage mechanics only, not library UI. |
 

@@ -146,3 +146,142 @@ describe("panel export service", () => {
     );
   });
 });
+
+// Minimal in-memory stand-in for FileSystemDirectoryHandle.
+const createFakeDirectory = (name = "root") => {
+  const files = new Map();
+  const directories = new Map();
+  const notFound = () =>
+    Object.assign(new Error("not found"), { name: "NotFoundError" });
+  return {
+    name,
+    files,
+    directories,
+    async getFileHandle(filename, { create = false } = {}) {
+      if (!files.has(filename) && !create) throw notFound();
+      return {
+        async createWritable() {
+          return {
+            async write(blob) {
+              files.set(filename, blob);
+            },
+            async close() {},
+          };
+        },
+      };
+    },
+    async getDirectoryHandle(dirname, { create = false } = {}) {
+      if (!directories.has(dirname)) {
+        if (!create) throw notFound();
+        directories.set(dirname, createFakeDirectory(dirname));
+      }
+      return directories.get(dirname);
+    },
+  };
+};
+
+describe("panel export service: remembered save folder writes", () => {
+  const createService = async () => {
+    const { createExportService } = await importPanelModule(
+      "export-service.mjs"
+    );
+    return createExportService({
+      noteUtils: NoteUtils,
+      normalizePageHistory: (entries) => entries || [],
+      chromeApi: { downloads: {}, runtime: {} },
+      fetchImpl: async () => {
+        throw new Error("unexpected fetch");
+      },
+    });
+  };
+
+  it("writes a plain note at the folder root and uniquifies repeats", async () => {
+    const service = await createService();
+    const prepared = await service.prepareNoteExport({
+      meetingName: "Review",
+      meetingDate: "2026-07-11T09:05",
+      notes: "Plain text",
+      pageHistory: [],
+    });
+    const folder = createFakeDirectory("_inbox");
+
+    const first = await service.writeNoteToDirectory(folder, prepared);
+    const second = await service.writeNoteToDirectory(folder, prepared);
+
+    assert.equal(first, prepared.downloadFilename);
+    assert.equal(
+      second,
+      prepared.downloadFilename.replace(/\.md$/, " (1).md")
+    );
+    assert.equal(folder.files.size, 2);
+    assert.equal(folder.directories.size, 0);
+  });
+
+  it("writes notes with images into their own folder with attachments", async () => {
+    const service = await createService();
+    const prepared = await service.prepareNoteExport({
+      meetingName: "Review",
+      meetingDate: "2026-07-11T09:05",
+      notes: "![Image](data:image/png;base64,aGk=)",
+      pageHistory: [],
+    });
+    const folder = createFakeDirectory("_inbox");
+
+    const written = await service.writeNoteToDirectory(folder, prepared);
+
+    assert.equal(written, prepared.noteDownloadFilename);
+    const noteFolder = folder.directories.get(prepared.exportRoot);
+    assert.ok(noteFolder.files.has(prepared.downloadFilename));
+    assert.equal(noteFolder.directories.get("attachments").files.size, 1);
+  });
+});
+
+describe("panel save folder access", () => {
+  const createHandle = ({ query, request }) => ({
+    name: "_inbox",
+    requested: 0,
+    async queryPermission() {
+      return query;
+    },
+    async requestPermission() {
+      this.requested += 1;
+      if (request instanceof Error) throw request;
+      return request;
+    },
+  });
+
+  it("returns the folder without prompting when access is already granted", async () => {
+    const { ensureFolderAccess } = await importPanelModule("save-folder.mjs");
+    const handle = createHandle({ query: "granted", request: "denied" });
+    assert.equal(await ensureFolderAccess(handle), handle);
+    assert.equal(handle.requested, 0);
+  });
+
+  it("asks for access and returns the folder when the user allows it", async () => {
+    const { ensureFolderAccess } = await importPanelModule("save-folder.mjs");
+    const handle = createHandle({ query: "prompt", request: "granted" });
+    assert.equal(await ensureFolderAccess(handle), handle);
+    assert.equal(handle.requested, 1);
+  });
+
+  it("reports a denied prompt instead of falling back to Downloads", async () => {
+    const { ensureFolderAccess } = await importPanelModule("save-folder.mjs");
+    const handle = createHandle({ query: "prompt", request: "denied" });
+    await assert.rejects(ensureFolderAccess(handle), {
+      name: "SaveFolderAccessError",
+      code: "permission-denied",
+    });
+  });
+
+  it("asks for a click when there is no user gesture to prompt with", async () => {
+    const { ensureFolderAccess } = await importPanelModule("save-folder.mjs");
+    const securityError = Object.assign(new Error("no gesture"), {
+      name: "SecurityError",
+    });
+    const handle = createHandle({ query: "prompt", request: securityError });
+    await assert.rejects(ensureFolderAccess(handle), {
+      code: "permission-needed",
+      message: 'Click Save to allow access to "_inbox".',
+    });
+  });
+});
